@@ -1,0 +1,6 @@
+.*
+Makefile
+README.md
+*.lua
+scripts
+tests

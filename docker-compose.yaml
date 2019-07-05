@@ -1,0 +1,86 @@
+version: '3.7'
+
+x-common: &common
+  depends_on:
+    - consul
+  volumes:
+    - ./examples/storage.lua:/opt/tarantool/storage.lua:ro
+    - ./examples/router.lua:/opt/tarantool/router.lua:ro
+    - ./autovshard:/usr/share/tarantool/autovshard:ro
+    - ./tests:/opt/tarantool/tests:ro
+    - ./scripts:/opt/tarantool/scripts:ro
+  build: .
+  image: tnt-autovshard
+  entrypoint: ''
+  working_dir: /opt/tarantool
+  command:
+    - tarantool
+    - storage.lua
+
+services:
+  a1:
+    <<: *common
+    ports:
+      - 3301:3301
+    hostname: a1
+    environment:
+      CONSUL_HTTP_ADDR: "http://consul:8500"
+      TARANTOOL_INSTANCE_UUID: aaaaaaaa-aaaa-aaaa-aaaa-000000000001
+      TARANTOOL_REPLICASET_UUID: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+
+  a2:
+    <<: *common
+    ports:
+      - 3302:3301
+    hostname: a2
+    environment:
+      CONSUL_HTTP_ADDR: "http://consul:8500"
+      TARANTOOL_INSTANCE_UUID: aaaaaaaa-aaaa-aaaa-aaaa-000000000002
+      TARANTOOL_REPLICASET_UUID: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+
+  b1:
+    <<: *common
+    ports:
+      - 3303:3301
+    hostname: b1
+    environment:
+      CONSUL_HTTP_ADDR: "http://consul:8500"
+      TARANTOOL_INSTANCE_UUID: bbbbbbbb-bbbb-bbbb-bbbb-000000000001
+      TARANTOOL_REPLICASET_UUID: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+
+  b2:
+    <<: *common
+    ports:
+      - 3304:3301
+    hostname: b2
+    environment:
+      CONSUL_HTTP_ADDR: "http://consul:8500"
+      TARANTOOL_INSTANCE_UUID: bbbbbbbb-bbbb-bbbb-bbbb-000000000002
+      TARANTOOL_REPLICASET_UUID: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+
+  router:
+    <<: *common
+    hostname: router
+    ports:
+      - 3300:3301
+    command:
+      - tarantool
+      - router.lua
+
+  consul:
+    image: consul:1.5.2
+    volumes:
+      - "./consul_kv.sh:/consul_kv.sh"
+    ports:
+      - 8500:8500
+    command:
+      - sh
+      - -c
+      - |
+
+        (
+        sleep 2
+        sh /consul_kv.sh
+        )&
+
+        consul agent -dev -client 0.0.0.0
