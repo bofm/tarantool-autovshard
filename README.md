@@ -111,6 +111,8 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
 
    ```
 
+ **Important:** If Consul is unreachable the Tarantool instance is set to **read-only** mode.
+
 ### See also
 
 * examples
