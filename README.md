@@ -128,6 +128,7 @@ installation without Tarantool sources at the moment. Therefore Vshard is not me
 
 * [] Versioning
 * [] Packaging
+* [] package-reload compatibility
 * [] More testing
 * [] Integration testing and CI
 * [] Documentation
