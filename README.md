@@ -119,7 +119,7 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
 ## Installation
 
 Luarocks sucks at pinning dependencies, and Vshard does not support (as of 2019-07-01) painless
-installation without Tarantool sources at the moment. Therefore Vshard is not mentioned in the rockspec.
+installation without Tarantool sources. Therefore Vshard is not mentioned in the rockspec.
 
 1. Install Vshard first.
 2. Install Autovshard. Autovshard depends only on Vshard.
