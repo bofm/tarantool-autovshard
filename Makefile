@@ -10,6 +10,7 @@ DOCKER_IMAGE=tnt-autovshard
 docker: .docker
 
 build: docker
+	docker-compose build
 
 clean:
 	docker-compose kill
