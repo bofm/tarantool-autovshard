@@ -1,6 +1,6 @@
 # Autovshard
 
-[![Build Status](https://travis-ci.org/bofm/tarantool-autovshard.svg?branch=master)](https://travis-ci.org/bofm/tarantool-autovshard)
+[![Build Status](https://travis-ci.org/bofm/tarantool-autovshard.svg?branch=master)](https://travis-ci.org/bofm/tarantool-autovshard) [![Coverage Status](https://coveralls.io/repos/github/bofm/tarantool-autovshard/badge.svg?branch=coverage)](https://coveralls.io/github/bofm/tarantool-autovshard?branch=coverage)
 
 A wrapper around [Vshard](https://github.com/tarantool/vshard) with automatic master election, failover and
 centralized configuration storage in Consul.

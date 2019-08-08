@@ -10,19 +10,33 @@ DOCKER_IMAGE=tnt-autovshard
 docker: .docker
 
 build: docker
-	docker-compose build
+	docker-compose build --pull
 
 clean:
 	docker-compose kill
 	docker-compose rm -fv
 	docker rmi "$(DOCKER_IMAGE)"
 	rm -f ./.docker
+	rm -f ./output/*
 
 test:
-	docker-compose run --rm a1 ./scripts/test.sh
+	docker-compose run --rm a1 ./scripts/test.sh --verbose
 
-test-ci: build
-	docker-compose run --rm a1 ./scripts/test.sh
+test-coverage:
+	docker-compose run --rm a1 ./scripts/test.sh --verbose --coverage
+
+test-ci: build test-coverage
+
+coverage-ci:
+	docker-compose run --rm \
+		-e TRAVIS=true \
+		-e CI=true \
+		-e COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} \
+		-e TRAVIS_JOB_ID=${TRAVIS_JOB_ID} \
+		-e TRAVIS_BRANCH=${TRAVIS_BRANCH} \
+		-e TRAVIS_REPO_SLUG=${TRAVIS_REPO_SLUG} \
+		a1 \
+		sh -c "cd output && exec luacov-coveralls -v --root=/usr/share/tarantool/"
 
 run:
 	docker-compose run --rm a1 tarantool

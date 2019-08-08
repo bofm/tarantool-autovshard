@@ -3,7 +3,8 @@ FROM tarantool/tarantool:1.10.3
 RUN apk add -U --no-cache build-base cmake git bash lua5.1-dev
 
 RUN luarocks install busted 2.0.rc12-1 \
-    && luarocks install luacov 0.13.0
+    && luarocks install luacov 0.13.0 \
+    && luarocks install luacov-coveralls
 
 RUN cd /tmp/ \
     && set -ex \

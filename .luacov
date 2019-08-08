@@ -2,3 +2,5 @@ tick = true
 modules = {
    ["autovshard.*"] = "autovshard"
 }
+statsfile = "output/luacov.stats.out"
+reportfile = "output/luacov.report.out"

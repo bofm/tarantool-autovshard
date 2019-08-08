@@ -9,6 +9,8 @@ x-common: &common
     - ./autovshard:/usr/share/tarantool/autovshard:ro
     - ./tests:/opt/tarantool/tests:ro
     - ./scripts:/opt/tarantool/scripts:ro
+    - ./.luacov:/opt/tarantool/.luacov:ro
+    - ./output:/opt/tarantool/output
   build: .
   image: tnt-autovshard
   entrypoint: ''

@@ -5,5 +5,7 @@ services:
   - docker
 
 script:
-  - make build
-  - make test
+  - make test-ci
+
+after_success:
+  - make coverage-ci
