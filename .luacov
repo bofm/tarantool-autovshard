@@ -1,0 +1,4 @@
+tick = true
+modules = {
+   ["autovshard.*"] = "autovshard"
+}
