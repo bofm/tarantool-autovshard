@@ -21,12 +21,10 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
 
 ## Usage
 
-1. Put Autovshard config to Consul KV.
-
-   ```sh
-   #!/usr/bin/env sh
-
-   consul kv put "autovshard/mycluster/autovshard_cfg_yaml" '
+1. Put Autovshard config to Consul KV under `<consul_kv_prefix>/<vshard_cluster_name>/autovshard_cfg_yaml`.
+  
+   ```yaml
+   # autovshard_cfg.yaml
    rebalancer_max_receiving: 10
    bucket_count: 100
    rebalancer_disbalance_threshold: 10
@@ -61,8 +59,12 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
                    address: b2:3301
                    name: b2
                    master: false
+   ```
+   
+   ```sh
+   #!/usr/bin/env sh
 
-   '
+   cat autovshard_cfg.yaml | consul kv put "autovshard/mycluster/autovshard_cfg_yaml" -
    ```
 
    The config is similar to Vshard config, but it has some extra fields
@@ -75,8 +77,7 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
    * `switchover_delay` - a delay in seconds to wait before taking master role away from another running instance with lower *master_weight*. This parameter is dynamic and can be changed by administrator at any time. A case when this parameter is useful is when an instance with the highest *master_weight* is restarted several times in a short amount of time. If the instance is up for a shorter time than the  *switchover_delay* there will be no master switch (switchover) every time the instance is restarted. And when the instance with the highest *master_weight* stays up for longer than the *switchover_delay* then the instance will finally get promoted to master role.
    * `address` - TCP address of the Tarantool instance in this format: `<host>:<port>`. It is passed through to Vshard as part of `uri` parameter.
    * `name` - same as *name* in Vshard.
-   * `master` - same as *master* in Vshard. The role of the instance. **DO NOT set *master=true* for multiple instances in one replica set**.
-     This parameter will be changed dynamically during the lifecycle of Autovshard. It can also be changed by administrator at any time. It is safe to set `master=false` for all instances.
+   * `master` - same as *master* in Vshard. The role of the instance. **DO NOT set *master=true* for multiple instances in one replica set**. This parameter will be changed dynamically during the lifecycle of Autovshard. It can also be changed by administrator at any time. It is safe to set `master=false` for all instances.
 
 2. Put this into your tarantool init.lua.
 
