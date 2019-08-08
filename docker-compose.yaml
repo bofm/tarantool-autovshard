@@ -72,7 +72,7 @@ services:
   consul:
     image: consul:1.5.2
     volumes:
-      - "./consul_kv.sh:/consul_kv.sh"
+      - "./examples/consul_kv.sh:/consul_kv.sh:ro"
     ports:
       - 8500:8500
     command:

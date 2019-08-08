@@ -1,5 +1,7 @@
 fiber = require("fiber")
 
+require("package.reload")
+
 vshard = require("vshard")
 autovshard = require("autovshard")
 
@@ -26,6 +28,7 @@ autovshard = require("autovshard").Autovshard.new{
 }
 
 autovshard:start()
+package.reload:register(autovshard, autovshard.stop)
 -- box.ctl.on_shutdown(function() autovshard:stop() end)
 
 box.ctl.wait_ro()
