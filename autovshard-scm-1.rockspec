@@ -6,7 +6,8 @@ source = {
 description = {
   summary = "autovshard",
   detailed = [[
-    autovshard client
+    Vshard wrapper with automatic master election, failover and centralized
+    configuration storage in Consul.
   ]],
   homepage = "https://github.com/bofm/tarantool-autovshard",
 }
