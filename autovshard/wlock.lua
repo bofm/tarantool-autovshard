@@ -135,8 +135,7 @@ function WLock:_renew_session_periodically(done_ch, session)
             if self:_put_contender_key(session.id) then
                 weight = self.weight
             else
-                log.error("could not could not put contentder key for Consul session %q",
-                          session.id)
+                log.error("could not put contentder key for Consul session %q", session.id)
                 done_ch:close()
             end
         end
