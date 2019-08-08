@@ -14,9 +14,9 @@ autovshard = require("autovshard").Autovshard.new{
     consul_kv_prefix = "autovshard",
     router = true,
     storage = false,
-    automaster = true,
 }
 autovshard:start()
+package.reload:register(autovshard, autovshard.stop)
 
 box.ctl.wait_rw()
 
