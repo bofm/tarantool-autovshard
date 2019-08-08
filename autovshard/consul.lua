@@ -349,5 +349,4 @@ function Session:delete()
     return ok and response_json == true
 end
 
--- [TODO] fix or remove version
-return {_VERSION = "0.0.0", ConsulClient = ConsulClient, Session = Session, KV = KV}
+return {ConsulClient = ConsulClient, Session = Session, KV = KV}

@@ -298,4 +298,4 @@ function Autovshard:start()
     fiber.create(self._mainloop, self)
 end
 
-return {Autovshard = Autovshard}
+return {Autovshard = Autovshard, _VERSION = "0.0.0"}
