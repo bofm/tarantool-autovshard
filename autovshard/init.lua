@@ -133,9 +133,8 @@ function Autovshard.new(opts)
     return self
 end
 
-function Autovshard:_apply_config(autovshard_cfg)
-    local cfg = config.make_vshard_config(autovshard_cfg, self.login, self.password, self.box_cfg)
-    local config_yaml = yaml.encode{cfg = cfg}
+function Autovshard:_vshard_apply_config(vshard_cfg)
+    local config_yaml = yaml.encode{cfg = vshard_cfg}
 
     -- sanitize config, replace passwords
     -- uri: username:password@host:3301
@@ -143,11 +142,11 @@ function Autovshard:_apply_config(autovshard_cfg)
 
     log.info("autovshard: applying vshard config:\n" .. config_yaml)
     if self.storage then
-        util.ok_or_log_error(vshard.storage.cfg, cfg, self.box_cfg.instance_uuid)
+        util.ok_or_log_error(vshard.storage.cfg, vshard_cfg, self.box_cfg.instance_uuid)
         util.ok_or_log_error(vshard.storage.rebalancer_wakeup)
     end
     if self.router then
-        util.ok_or_log_error(vshard.router.cfg, cfg)
+        util.ok_or_log_error(vshard.router.cfg, vshard_cfg)
         util.ok_or_log_error(vshard.router.bootstrap)
         util.ok_or_log_error(vshard.router.discovery_wakeup)
     end
@@ -160,7 +159,7 @@ function Autovshard:_set_instance_read_only(autovshard_cfg)
                                                                   self.box_cfg.instance_uuid)
     if changed then
         log.info("autovshard: setting instance to read-only...")
-        vshard.storage.cfg(new_vshard_cfg, self.box_cfg.instance_uuid)
+        self:_vshard_apply_config(new_vshard_cfg)
     end
 end
 
@@ -240,7 +239,8 @@ function Autovshard:_mainloop()
                 log.info("autovshasrd: won't apply the config, master_count != 1, " ..
                              "cannot bootstrap with this config.")
             else
-                self:_apply_config(cfg)
+                self:_vshard_apply_config(config.make_vshard_config(cfg, self.login, self.password,
+                                                                    self.box_cfg))
                 bootstrap_done = true
             end
 
