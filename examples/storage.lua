@@ -42,9 +42,9 @@ box.once("schema.v1.space.test", function()
     -- s:create_index("bucket_id")
 end)
 
-function put(x, bucket_id)
+function put(x, bucket_id, ...)
     --
-    return box.space.test:put(box.tuple.new(x, bucket_id))
+    return box.space.test:put(box.tuple.new(x, bucket_id, ...))
 end
 
 function get(x) return box.space.test:get(x) end

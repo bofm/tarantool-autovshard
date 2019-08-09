@@ -1,3 +1,5 @@
+require("package.reload")
+
 local console = require("console")
 local term = require("term")
 vshard = require("vshard")
@@ -32,9 +34,9 @@ function get(x)
     return vshard.router.callrw(bucket_id, "get", {x})
 end
 
-function put(x)
+function put(x, ...)
     local bucket_id = vshard.router.bucket_id(x)
-    return vshard.router.callrw(bucket_id, "put", {x, bucket_id})
+    return vshard.router.callrw(bucket_id, "put", {x, bucket_id, ...})
 end
 
 if term.isatty(io.stdout) then if pcall(console.start) then os.exit(0) end end
