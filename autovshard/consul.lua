@@ -133,8 +133,9 @@ function ConsulClient:get(key, wait_seconds, index, prefix, consistent)
         timeout = (wait_seconds or 0) + HTTP_TIMEOUT,
     }
 
+    local new_index
     if response and response.headers and response.headers["x-consul-index"] then
-        index = tonumber(response.headers["x-consul-index"])
+        new_index = tonumber(response.headers["x-consul-index"])
     end
     -- log.info("new_index %s", new_index)
     -- if response and response.headers then
@@ -143,18 +144,16 @@ function ConsulClient:get(key, wait_seconds, index, prefix, consistent)
     --     end
     -- end
 
-    if index then
-        if index <= 0 then
+    if new_index then
+        if new_index <= 0 then
             -- https://www.consul.io/api/features/blocking.html
             -- Sanity check index is greater than zero
-            error(string.format('Consul kv "%s" modify index=%d <= 0', key, index))
-        elseif index and index < index then
+            error(string.format('Consul kv "%s" modify index=%d <= 0', key, new_index))
+        elseif index and new_index < index then
             -- https://www.consul.io/api/features/blocking.html
             -- Implementations must check to see if a returned index is lower than
             -- the previous value, and if it is, should reset index to 0
-            index = 0
-        else
-            index = index
+            new_index = 0
         end
     end
 
@@ -172,9 +171,9 @@ function ConsulClient:get(key, wait_seconds, index, prefix, consistent)
         else
             result = KV.from_consul_response(body[1])
         end
-        return result, index
+        return result, new_index
     elseif response.status == 404 then
-        return nil, index
+        return nil, new_index
     else
         error(string.format("consul kv get error: %s", yaml.encode(response)))
     end
