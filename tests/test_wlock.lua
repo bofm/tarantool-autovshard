@@ -140,7 +140,6 @@ describe("test wlock", function()
         end)
 
         it("weight", function()
-            pending("set_weight takes too long")
             assert.truthy(c)
             local l1_locked
             local f1 = fiber.new(function(c, done1)

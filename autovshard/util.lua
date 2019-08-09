@@ -167,4 +167,13 @@ function util.yaml_encode_pretty_mapping(t) --
     return yaml.encode(with_mt_serialize(t, "mapping"))
 end
 
+local function finalize(finalizer, ...)
+    finalizer()
+    return ...
+end
+
+function util.finally(finalizer, fn, ...) --
+    return finalize(finalizer, util.ok_or_log_error(fn, ...))
+end
+
 return util

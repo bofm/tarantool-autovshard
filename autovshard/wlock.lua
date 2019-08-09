@@ -29,17 +29,18 @@ WLock.__index = WLock
 ---@param info any a json/yaml serializable object to attach to the lock for information purpose
 function WLock.new(consul_client, kv_prefix, weight, delay, info)
     self = setmetatable({}, WLock)
-    self.consul_client = consul_client
-    self.prefix = kv_prefix
-    self.weight = weight
-    self.delay = delay or 0
-    self.info = info
+    self._consul_client = consul_client
+    self._prefix = kv_prefix
+    self._weight = weight
+    self._delay = delay or 0
+    self._info = info
+    self._weight_changed = fiber.cond() -- for updating weight at runtime
     return self
 end
 
 function WLock:_get_lock_kv(kvs)
     if kvs == nil then return end
-    local LOCK_KEY = util.urljoin(self.prefix, CONSUL_LOCK_KEY)
+    local LOCK_KEY = util.urljoin(self._prefix, CONSUL_LOCK_KEY)
     for _, kv in ipairs(kvs) do if kv.key == LOCK_KEY then return kv end end
 end
 
@@ -101,10 +102,10 @@ function M.parse_kvs(kvs, prefix)
 end
 
 function WLock:_create_session(done_ch, info)
-    info = info or self.info
+    info = info or self._info
     local session
     while not done_ch:is_closed() do
-        session = util.ok_or_log_error(self.consul_client.session, self.consul_client,
+        session = util.ok_or_log_error(self._consul_client.session, self._consul_client,
                                        CONSUL_SESSION_TTL, "delete")
         if session then
             log.info("created Consul session %q", session.id)
@@ -121,28 +122,46 @@ end
 
 function WLock:_renew_session_periodically(done_ch, session)
     local timeout = 0.66 * CONSUL_SESSION_TTL
-    local weight = self.weight
-    while true do
-        done_ch:get(timeout)
-        if done_ch:is_closed() then break end
-        if not util.ok_or_log_error(session.renew, session) then
-            log.error("could not renew Consul session %q", session.id)
-            -- if renew fails then we release the lock and return
-            done_ch:close()
-        end
+    local weight = self._weight
 
-        if self.weight ~= weight then
-            if self:_put_contender_key(session.id) then
-                weight = self.weight
-            else
-                log.error("could not put contentder key for Consul session %q", session.id)
+    local tick = fiber.cond()
+
+    local weight_change_waiter = fiber.new(function()
+        while true do
+            self._weight_changed:wait()
+            tick:broadcast()
+        end
+    end)
+    local done_waiter = fiber.new(function()
+        done_ch:get()
+        tick:broadcast()
+    end)
+
+    util.ok_or_log_error(function()
+        while true do
+            tick:wait(timeout)
+            if done_ch:is_closed() then break end
+            if not util.ok_or_log_error(session.renew, session) then
+                log.error("could not renew Consul session %q", session.id)
+                -- if renew fails then we release the lock and return
                 done_ch:close()
             end
+
+            if self._weight ~= weight then
+                if self:_put_contender_key(session.id) then
+                    weight = self._weight
+                else
+                    log.error("could not put contentder key for Consul session %q", session.id)
+                    done_ch:close()
+                end
+            end
         end
-    end
-    if util.ok_or_log_error(session.delete, session) then
-        log.info("released lock and deleted Consul session %q", session.id)
-    end
+        if util.ok_or_log_error(session.delete, session) then
+            log.info("released lock and deleted Consul session %q", session.id)
+        end
+    end)
+    pcall(done_waiter.cancel, done_waiter)
+    pcall(weight_change_waiter.cancel, weight_change_waiter)
 end
 
 function WLock:_wait_ready_to_lock(done_ch, session_id)
@@ -152,12 +171,12 @@ function WLock:_wait_ready_to_lock(done_ch, session_id)
 
     local function start_delay_fiber(kvs)
         delay_f = fiber.new(function()
-            done_ch:get(self.delay)
+            done_ch:get(self._delay)
             if done_ch:is_closed() then return end
             ready_to_lock:put(kvs)
         end)
         delay_f:name("lock_delay", {truncate = true})
-        log.info("started lock delay %s seconds with Consul session %q", self.delay, session_id)
+        log.info("started lock delay %s seconds with Consul session %q", self._delay, session_id)
     end
 
     local function stop_delay_fiber()
@@ -168,14 +187,14 @@ function WLock:_wait_ready_to_lock(done_ch, session_id)
     end
 
     local function on_change(kvs)
-        local contender_weights, holder, max_weight = M.parse_kvs(kvs, self.prefix)
+        local contender_weights, holder, max_weight = M.parse_kvs(kvs, self._prefix)
 
         -- check if we should preceed with the lock
         local can_lock = (contender_weights[session_id] or 0) >= max_weight and
                              (not holder or (contender_weights[holder] or 0) < max_weight)
 
         if can_lock then
-            if holder and self.delay > 0 and not delay_f then
+            if holder and self._delay > 0 and not delay_f then
                 start_delay_fiber(kvs)
             else
                 stop_delay_fiber()
@@ -186,8 +205,8 @@ function WLock:_wait_ready_to_lock(done_ch, session_id)
         end
     end
 
-    local _, stop_watching = self.consul_client:watch{
-        key = self.prefix,
+    local _, stop_watching = self._consul_client:watch{
+        key = self._prefix,
         prefix = true,
         on_change = on_change,
         consistent = true,
@@ -216,12 +235,12 @@ function WLock:_wait_ready_to_lock(done_ch, session_id)
 end
 
 function WLock:_put_lock_key(session_id, kvs)
-    local lock_key = util.urljoin(self.prefix, CONSUL_LOCK_KEY)
-    local value = json.encode({holder = session_id, info = self.info})
+    local lock_key = util.urljoin(self._prefix, CONSUL_LOCK_KEY)
+    local value = json.encode({holder = session_id, info = self._info})
     local lock_kv = self:_get_lock_kv(kvs)
     local cas = 0
     if lock_kv then cas = lock_kv.modify_index end
-    local put_ok = util.ok_or_log_error(self.consul_client.put, self.consul_client, lock_key,
+    local put_ok = util.ok_or_log_error(self._consul_client.put, self._consul_client, lock_key,
                                         value, cas)
     if put_ok then
         log.info("acquired lock for Consul session %q", session_id)
@@ -232,13 +251,13 @@ function WLock:_put_lock_key(session_id, kvs)
 end
 
 function WLock:_put_contender_key(session_id)
-    local key = util.urljoin(self.prefix, session_id)
-    local value = json.encode({weight = self.weight, info = self.info})
+    local key = util.urljoin(self._prefix, session_id)
+    local value = json.encode({weight = self._weight, info = self._info})
     local acquire = session_id
-    local put_ok = util.ok_or_log_error(self.consul_client.put, self.consul_client, key, value,
+    local put_ok = util.ok_or_log_error(self._consul_client.put, self._consul_client, key, value,
                                         nil, acquire)
     if put_ok then
-        log.info("put Consul contender key: session=%q weight=%q", session_id, self.weight)
+        log.info("put Consul contender key: session=%q weight=%q", session_id, self._weight)
     end
     return put_ok
 end
@@ -249,12 +268,12 @@ function WLock:_hold_lock(done_ch, session_id)
     -- [todo]: retry when monitoring lock
 
     -- watch lock key prefix
-    local _, stop_watching = self.consul_client:watch{
-        key = self.prefix,
+    local _, stop_watching = self._consul_client:watch{
+        key = self._prefix,
         prefix = true,
         on_change = function(kvs)
             -- wait until the lock session is invalidated or the lock key is changed
-            local _, holder, _ = M.parse_kvs(kvs, self.prefix)
+            local _, holder, _ = M.parse_kvs(kvs, self._prefix)
             -- check if we are still the holder
             if holder ~= session_id then
                 log.info("lost lock for Consul session %q: holder changed", session_id)
@@ -275,9 +294,12 @@ function WLock:_hold_lock(done_ch, session_id)
     end)
 end
 
-function WLock:set_weight(weight) self.weight = weight end
+function WLock:set_weight(weight)
+    self._weight = weight
+    self._weight_changed:broadcast()
+end
 
-function WLock:set_delay(delay) self.delay = delay end
+function WLock:set_delay(delay) self._delay = delay end
 
 -- @param done_ch "done channel". It will be closed when the lock is released or invalidated.
 --  And vice-versa, if `done_ch` is closed, the lock gets released.
