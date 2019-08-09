@@ -88,7 +88,7 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
    local box_cfg = {
        listen = 3301,  -- required
        instance_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",  -- required for storage instances, prefer lowercase
-       replicaset_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",  -- required, prefer lowercase
+       replicaset_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",  -- required for storage instances, prefer lowercase
        -- ! DO NOT set `replication` parameter, Vshard will take care of it
        -- specify any other_box_cfg options
    }
