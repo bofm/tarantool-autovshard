@@ -31,9 +31,8 @@ autovshard:start()
 package.reload:register(autovshard, autovshard.stop)
 -- box.ctl.on_shutdown(function() autovshard:stop() end)
 
-box.ctl.wait_ro()
-vshard.storage.sync()
-pcall(vshard.router.bootstrap)
+box.ctl.wait_rw()
+
 box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
 box.once("schema.v1.space.test", function()
     --
