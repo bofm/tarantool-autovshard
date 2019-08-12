@@ -34,7 +34,8 @@ function WLock.new(consul_client, kv_prefix, weight, delay, info)
     self._weight = weight
     self._delay = delay or 0
     self._info = info
-    self._weight_changed = fiber.cond() -- for updating weight at runtime
+    self._weight_updated = fiber.cond() -- for updating weight at runtime
+    self._delay_updated = fiber.cond() -- for updating delay at runtime
     return self
 end
 
@@ -128,7 +129,7 @@ function WLock:_renew_session_periodically(done_ch, session)
 
     local weight_change_waiter = fiber.new(function()
         while true do
-            self._weight_changed:wait()
+            self._weight_updated:wait()
             tick:broadcast()
         end
     end)
@@ -164,44 +165,67 @@ function WLock:_renew_session_periodically(done_ch, session)
     pcall(weight_change_waiter.cancel, weight_change_waiter)
 end
 
+local function with_delay(done_ch, delay, fn, ...)
+    local cancelled = false
+    done_ch:get(delay)
+    if done_ch:is_closed() then --
+        cancelled = true
+        return cancelled
+    end
+    return cancelled, fn(...)
+end
+
 function WLock:_wait_ready_to_lock(done_ch, session_id)
     -- watch kv prefix and check if we can should attempt to acquire the lock
     local ready_to_lock = fiber.channel()
+
     local delay_f
-
-    local function start_delay_fiber(kvs)
-        delay_f = fiber.new(function()
-            done_ch:get(self._delay)
-            if done_ch:is_closed() then return end
-            ready_to_lock:put(kvs)
-        end)
-        delay_f:name("lock_delay", {truncate = true})
-        log.info("started lock delay %s seconds with Consul session %q", self._delay, session_id)
-    end
-
-    local function stop_delay_fiber()
+    local can_lock_since
+    local function ensure_delay_f_stopped()
         if delay_f ~= nil then
             pcall(delay_f.cancel, delay_f)
             delay_f = nil
         end
     end
 
+    local function start_delay_f(kvs)
+        delay_f = fiber.new(function()
+            while true do
+                local remaining_delay = math.max(0, can_lock_since + self._delay - fiber.time())
+                log.info(
+                    "(re)started lock delay: waiting %s seconds before acquiring lock with Consul session %q",
+                    math.floor(remaining_delay), session_id)
+                local c, _ = util.select({done_ch, self._delay_updated}, remaining_delay)
+                if c == done_ch then
+                    break
+                elseif c == self._delay_updated then
+                    -- continue
+                else
+                    ready_to_lock:put(kvs)
+                    break
+                end
+            end
+        end)
+        delay_f:name("lock_delay", {truncate = true})
+    end
+
     local function on_change(kvs)
+        -- need to restart delay fiber on kvs change
+        ensure_delay_f_stopped()
+
         local contender_weights, holder, max_weight = M.parse_kvs(kvs, self._prefix)
 
         -- check if we should preceed with the lock
         local can_lock = (contender_weights[session_id] or 0) >= max_weight and
                              (not holder or (contender_weights[holder] or 0) < max_weight)
 
-        if can_lock then
-            if holder and self._delay > 0 and not delay_f then
-                start_delay_fiber(kvs)
-            else
-                stop_delay_fiber()
-                ready_to_lock:put(kvs)
-            end
-        else
-            stop_delay_fiber()
+        if can_lock and holder ~= nil and self._delay > 0 then
+            can_lock_since = can_lock_since or fiber.time()
+            start_delay_f(kvs)
+        elseif can_lock then
+            ready_to_lock:put(kvs)
+        elseif not can_lock then
+            can_lock_since = nil
         end
     end
 
@@ -225,7 +249,7 @@ function WLock:_wait_ready_to_lock(done_ch, session_id)
     stop_watching()
     pcall(watchdog.cancel, watchdog)
     ready_to_lock:close()
-    stop_delay_fiber()
+    ensure_delay_f_stopped()
     -----------
 
     if ch == ready_to_lock then --
@@ -296,10 +320,13 @@ end
 
 function WLock:set_weight(weight)
     self._weight = weight
-    self._weight_changed:broadcast()
+    self._weight_updated:broadcast()
 end
 
-function WLock:set_delay(delay) self._delay = delay end
+function WLock:set_delay(delay)
+    self._delay = delay
+    self._delay_updated:broadcast()
+end
 
 -- @param done_ch "done channel". It will be closed when the lock is released or invalidated.
 --  And vice-versa, if `done_ch` is closed, the lock gets released.

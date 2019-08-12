@@ -1,4 +1,4 @@
-local json = require("json")
+local clock = require("clock")
 local util = require("autovshard.util")
 
 describe("test wlock", function()
@@ -144,35 +144,99 @@ describe("test wlock", function()
             local l1_locked
             local f1 = fiber.new(function(c, done1)
                 l1_locked = l1:acquire(done1)
-                c:put{l1, "locked"}
+                c:put{"l1", "locked"}
                 done1:get()
-                c:put{l1, "released"}
+                c:put{"l1", "released"}
             end, c, done1)
 
             local l2_locked
             local f2 = fiber.new(function(c, done2)
                 l2_locked = l2:acquire(done2)
-                c:put{l2, "locked"}
+                c:put{"l2", "locked"}
                 done2:get()
-                c:put{l2, "released"}
+                c:put{"l2", "released"}
             end, c, done2)
 
-            local l, event = unpack(c:get(1))
-            assert.are.equal(l, l2)
+            local l, event = unpack(c:get(2))
+            assert.are.equal(l, "l2")
             assert.are.equal(event, "locked")
             assert.is_true(l2_locked)
             assert.is_nil(c:get(1))
 
             l1:set_weight(30)
-            local msg = c:get(1)
+            local msg = c:get(2)
             assert.truthy(msg)
             l, event = unpack(msg)
-            assert.are.equal(l, l1)
+            assert.are.equal(l, "l1")
             assert.are.equal(event, "locked")
 
-            l, event = unpack(c:get(1))
-            assert.are.equal(l, l2)
+            l, event = unpack(c:get(2))
+            assert.are.equal(l, "l2")
             assert.are.equal(event, "released")
+        end)
+    end)
+    describe("lock delay", function()
+        local l1, l2, done1, done2, c, events
+
+        setup(function()
+            l1 = wlock.WLock.new(consul_client, "test/wlock", 10, 1)
+            l2 = wlock.WLock.new(consul_client, "test/wlock", 20, 999)
+            done1 = fiber.channel()
+            done2 = fiber.channel()
+            c = fiber.channel(999)
+        end)
+
+        teardown(function()
+            done1:close()
+            done2:close()
+            c:close()
+            l1, l2, done1, done2, c = nil, nil, nil, nil, nil
+        end)
+
+        it("delay and set_delay", function()
+            assert.truthy(c)
+            local l1_locked
+            local f1 = fiber.new(function(c, done1)
+                l1_locked = l1:acquire(done1)
+                c:put "l1 locked"
+                done1:get()
+                c:put "l1 released"
+            end, c, done1)
+
+            -- let l1 lock
+            fiber.sleep(0.1)
+
+            local l2_locked
+            local f2 = fiber.new(function(c, done2)
+                local t = clock.monotonic()
+                l2_locked = l2:acquire(done2)
+                local elapsed = clock.monotonic() - t
+                c:put{"l2 locked", elapsed > 2 and elapsed < 3}
+                done2:get()
+                c:put "l2 released"
+            end, c, done2)
+
+            fiber.new(function()
+                fiber.sleep(1)
+                l2:set_delay(2)
+                c:put("l2:set_delay")
+            end)
+
+            local expected_events = { --
+                "l1 locked", --
+                "l2:set_delay", --
+                {"l2 locked", true}, --
+                "l1 released", --
+            }
+
+            fiber.sleep(3)
+            local events = {}
+            repeat
+                local msg = c:get(0)
+                if msg then table.insert(events, msg) end
+            until msg == nil
+
+            assert.are.same(expected_events, events)
         end)
     end)
 end)
