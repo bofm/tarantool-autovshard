@@ -26,7 +26,7 @@ describe("test util", function()
         assert.truthy(n <= 110, "cnt=" .. n .. " must be < 110")
 
         n = 0
-        local incr2 = util.rate_limited(incr, 10, 100)
+        local incr2 = util.rate_limited(incr, 10, 0)
         incr2()
         local t = clock.monotonic()
         incr2()
