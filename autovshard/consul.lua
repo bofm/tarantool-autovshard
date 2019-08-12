@@ -121,6 +121,15 @@ function ConsulClient:delete(key, cas)
 end
 
 function ConsulClient:get(key, wait_seconds, index, prefix, consistent)
+    wait_seconds = (wait_seconds or 0)
+
+    -- https://www.consul.io/api/features/blocking.html
+    -- A small random amount of additional wait time is added to the supplied
+    -- maximum wait time to spread out the wake up time of any concurrent
+    -- requests. This adds up to wait / 16 additional time to the maximum
+    -- duration.
+    wait_seconds = wait_seconds + wait_seconds / 16
+
     local response = self.request{
         method = "GET",
         url_path = {"kv", key},
@@ -230,7 +239,7 @@ function ConsulClient:watch(opts)
         end
         local kv, index = self:get(key, wait_seconds, prev_index, opts.prefix, opts.consistent)
         if done_ch:is_closed() then return end
-        local changed = index ~= prev_index or kv ~= prev_kv
+        local changed = index ~= prev_index
         prev_kv, prev_index = kv, index
         if changed then on_change(kv, index) end
         got_error = false
