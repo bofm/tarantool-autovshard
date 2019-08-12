@@ -123,13 +123,20 @@ end
 
 function util.ok_or_log_error(fn, ...) return select(2, xpcall(fn, log.error, ...)) end
 
-function util.select(channels, timeout)
+function util.select(channels_or_conds, timeout)
     local first_channel, first_message
     local cond = fiber.cond()
     local fibers = {}
-    for _, c in ipairs(channels) do
+    for _, c in ipairs(channels_or_conds) do
         table.insert(fibers, fiber.new(function()
-            local msg = c:get()
+            local msg
+            if c.get then
+                -- c is a fiber.channel
+                msg = c:get()
+            else
+                -- c is a fiber.cond
+                msg = c:wait()
+            end
             if not first_channel then first_message, first_channel = msg, c end
             cond:signal()
         end))
