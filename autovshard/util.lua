@@ -141,9 +141,9 @@ function util.select(channels_or_conds, timeout)
             cond:signal()
         end))
     end
-    local got_signal = cond:wait(timeout)
+    local ok, got_signal = pcall(cond.wait, cond, timeout)
     for _, f in ipairs(fibers) do pcall(f.cancel, f) end
-    if got_signal then return first_channel, first_message end
+    if ok and got_signal then return first_channel, first_message end
     return nil, "timeout"
 end
 
