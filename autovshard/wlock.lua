@@ -165,16 +165,6 @@ function WLock:_renew_session_periodically(done_ch, session)
     pcall(weight_change_waiter.cancel, weight_change_waiter)
 end
 
-local function with_delay(done_ch, delay, fn, ...)
-    local cancelled = false
-    done_ch:get(delay)
-    if done_ch:is_closed() then --
-        cancelled = true
-        return cancelled
-    end
-    return cancelled, fn(...)
-end
-
 function WLock:_wait_ready_to_lock(done_ch, session_id)
     -- watch kv prefix and check if we can should attempt to acquire the lock
     local ready_to_lock = fiber.channel()
