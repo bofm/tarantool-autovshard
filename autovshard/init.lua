@@ -287,15 +287,17 @@ function Autovshard:_mainloop()
 end
 
 function Autovshard:stop()
-    if not self.started then return end
+    if not self.started then return false end
     self.events:put{EVENT_STOP}
     self.started = false
+    return true
 end
 
 function Autovshard:start()
-    if self.started then return end
+    if self.started then return false end
     self.started = true
     fiber.create(self._mainloop, self)
+    return true
 end
 
 return {Autovshard = Autovshard, _VERSION = "0.0.3"}
