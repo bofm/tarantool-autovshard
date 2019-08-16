@@ -166,7 +166,7 @@ end
 function Autovshard:_promote_to_master(autovshard_cfg, cfg_modify_index)
     log.info("autovshard: promoting this Tarantool instance_uuid=%q to master",
              self.box_cfg.instance_uuid)
-    new_cfg = config.promote_to_master(autovshard_cfg, self.box_cfg.replicaset_uuid,
+    local new_cfg = config.promote_to_master(autovshard_cfg, self.box_cfg.replicaset_uuid,
                                        self.box_cfg.instance_uuid)
 
     -- update autovshard config in Consul
