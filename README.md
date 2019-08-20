@@ -98,7 +98,7 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
        cluster_name = "mycluster",  -- the name of your sharding cluster
        login = "storage",  -- login for Vshard
        password = "storage",  -- password for Vshard
-       consul_http_address = "http://consul:8500",  --
+       consul_http_address = "http://127.0.0.1:8500",  -- assuming Consul agent is running on localhost
        consul_token = nil,
        consul_kv_prefix = "autovshard",
        router = true,  -- true for Vshard router instance
