@@ -112,6 +112,9 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
    -- This might be helpful
    -- box.ctl.on_shutdown(function() autovshard:stop() end)
 
+   -- If you use package.reload (https://github.com/moonlibs/package-reload)
+   -- package.reload:register(autovshard, autovshard.stop)
+
    ```
 
  **Important:** If Consul is unreachable the Tarantool instance is set to **read-only** mode.
@@ -135,11 +138,7 @@ It is recommended to run Consul agent on each server with Tarantool instances an
 
 ## TODO
 
-* [] Versioning
-* [] Packaging
-* [] package-reload compatibility
 * [] More testing
 * [] Integration testing and CI
-* [] Documentation
 * [] Improve logging
 * [] See todo's in the sources
