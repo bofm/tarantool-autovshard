@@ -1,4 +1,10 @@
-language: generic
+language: python
+python:
+  - '3.7'
+install:
+  - python -m pip install pipenv
+  - pipenv install --dev --deploy
+
 dist: bionic
 
 services:
@@ -6,6 +12,7 @@ services:
 
 script:
   - make test-ci
+  - make test-e2e-ci
 
 after_success:
   - make coverage-ci
