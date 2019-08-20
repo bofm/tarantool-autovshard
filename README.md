@@ -118,8 +118,8 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
 
 ### See also
 
-* examples
-* docker-compose.yaml
+* [examples](examples)
+* [docker-compose.yaml](docker-compose.yaml)
 
 ## Installation
 
@@ -128,6 +128,10 @@ installation without Tarantool sources. Therefore Vshard is not mentioned in the
 
 1. Install Vshard first.
 2. Install Autovshard. Autovshard depends only on Vshard.
+
+## Notes on Consul
+
+It is recommended to run Consul agent on each server with Tarantool instances and set `consul_http_address` to the address of Consul agent on localhost.
 
 ## TODO
 
