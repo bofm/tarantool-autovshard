@@ -1,7 +1,5 @@
 require("package.reload")
 
-local console = require("console")
-local term = require("term")
 vshard = require("vshard")
 
 local box_cfg = {listen = 3301, feedback_enabled = false}
@@ -20,10 +18,6 @@ autovshard = require("autovshard").Autovshard.new{
 autovshard:start()
 package.reload:register(autovshard, autovshard.stop)
 
-box.ctl.wait_rw()
-
-box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
-
 function test(x)
     local bucket_id = vshard.router.bucket_id(x)
     return vshard.router.callrw(bucket_id, "tostring", {"test ok"})
@@ -39,4 +33,12 @@ function put(x, ...)
     return vshard.router.callrw(bucket_id, "put", {x, bucket_id, ...})
 end
 
-if term.isatty(io.stdout) then if pcall(console.start) then os.exit(0) end end
+function delete(x, ...)
+    local bucket_id = vshard.router.bucket_id(x)
+    return vshard.router.callrw(bucket_id, "delete", {x, bucket_id, ...})
+end
+
+
+box.ctl.wait_rw()
+
+box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")

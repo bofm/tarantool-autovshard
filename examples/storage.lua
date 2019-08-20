@@ -29,21 +29,36 @@ autovshard = require("autovshard").Autovshard.new{
 
 autovshard:start()
 package.reload:register(autovshard, autovshard.stop)
--- box.ctl.on_shutdown(function() autovshard:stop() end)
+-- box.ctl.on_shutdown(function() autovshard:stop() end)  -- tarantool 2.x only
 
-box.ctl.wait_rw()
-
-box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
-box.once("schema.v1.space.test", function()
-    --
-    local s = box.schema.space.create("test")
-    s:create_index("pk")
-    -- s:create_index("bucket_id")
-end)
-
+-- public storage API
 function put(x, bucket_id, ...)
     --
     return box.space.test:put(box.tuple.new(x, bucket_id, ...))
 end
 
-function get(x) return box.space.test:get(x) end
+function get(x)
+    return box.space.test:get(x)
+end
+
+function delete(x)
+    return box.space.test:delete(x)
+end
+
+
+-- wait for tarantool master instance bootstrap
+box.ctl.wait_rw()
+
+-- perform write operation
+box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
+box.once("schema.v1.space.test", function()
+    --
+    local s = box.schema.space.create("test")
+    s:format({
+        { 'id', 'unsigned' },
+        { 'bucket_id', 'unsigned' },
+        { 'data', 'scalar' },
+    })
+    s:create_index("pk", { parts = { 'id' } })
+    s:create_index("bucket_id", { parts = { 'bucket_id' }, unique = false })
+end)
