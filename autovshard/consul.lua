@@ -332,6 +332,12 @@ function ConsulClient:session(ttl, behavior)
     return session
 end
 
+local function rstrip_s(str)
+    if string.sub(str, string.len(str)) == "s" then --
+        return string.sub(str, 1, string.len(str) - 1)
+    end
+end
+
 function Session:renew()
     local response = self.consul.request{method = "PUT", url_path = {"session/renew", self.id}}
     if response.status == 200 then
@@ -344,6 +350,10 @@ function Session:renew()
     end
     local session_json = json.decode(response.body)[1]
     assert(session_json.ID == self.id)
+    -- Note: Consul may return a TTL value higher than the one specified during session creation.
+    -- This indicates the server is under high load and is requesting clients renew less often.
+    self.ttl =
+        tonumber(rstrip_s(assert(session_json.TTL, "missing TTL in session renew response")))
     return session_json
 end
 
