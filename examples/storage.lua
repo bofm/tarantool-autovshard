@@ -1,9 +1,6 @@
-fiber = require("fiber")
-
 require("package.reload")
 
 vshard = require("vshard")
-autovshard = require("autovshard")
 
 local box_cfg = {
     listen = 3301,
