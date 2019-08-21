@@ -239,6 +239,7 @@ function Autovshard:_mainloop()
                 log.info("autovshasrd: won't apply the config, master_count != 1, " ..
                              "cannot bootstrap with this config.")
             else
+                -- [TODO] do not apply new config if it is the same as the current one
                 self:_vshard_apply_config(config.make_vshard_config(cfg, self.login, self.password,
                                                                     self.box_cfg))
                 bootstrap_done = true
