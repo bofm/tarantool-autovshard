@@ -15,7 +15,7 @@ local _
 local M = {}
 
 local CONSUL_LOCK_KEY = "lock"
-local CONSUL_SESSION_TTL = 15
+local CONSUL_DEFAULT_SESSION_TTL = 15
 local RETRY_TIMEOUT = 10
 
 local WLock = {}
@@ -27,7 +27,8 @@ WLock.__index = WLock
 ---@param weight number lock weight
 ---@param delay number delay in seconds to wait before taking the lock away from other contender
 ---@param info any a json/yaml serializable object to attach to the lock for information purpose
-function WLock.new(consul_client, kv_prefix, weight, delay, info)
+---@param session_ttl number Consul session TTL in seconds
+function WLock.new(consul_client, kv_prefix, weight, delay, info, session_ttl)
     self = setmetatable({}, WLock)
     self._consul_client = consul_client
     self._prefix = kv_prefix
@@ -36,6 +37,7 @@ function WLock.new(consul_client, kv_prefix, weight, delay, info)
     self._info = info
     self._weight_updated = fiber.cond() -- for updating weight at runtime
     self._delay_updated = fiber.cond() -- for updating delay at runtime
+    self._session_ttl = session_ttl or CONSUL_DEFAULT_SESSION_TTL
     return self
 end
 
@@ -107,7 +109,7 @@ function WLock:_create_session(done_ch, info)
     local session
     while not done_ch:is_closed() do
         session = util.ok_or_log_error(self._consul_client.session, self._consul_client,
-                                       CONSUL_SESSION_TTL, "delete")
+                                       self._session_ttl, "delete")
         if session then
             log.info("created Consul session %q", session.id)
             -- put contender key with acquire
@@ -122,7 +124,6 @@ function WLock:_create_session(done_ch, info)
 end
 
 function WLock:_renew_session_periodically(done_ch, session)
-    local timeout = 0.66 * CONSUL_SESSION_TTL
     local weight = self._weight
 
     local tick = fiber.cond()
@@ -140,7 +141,7 @@ function WLock:_renew_session_periodically(done_ch, session)
 
     util.ok_or_log_error(function()
         while true do
-            tick:wait(timeout)
+            tick:wait(0.66 * session.ttl)
             if done_ch:is_closed() then break end
             if not util.ok_or_log_error(session.renew, session) then
                 log.error("could not renew Consul session %q", session.id)

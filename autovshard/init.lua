@@ -95,6 +95,11 @@ function Autovshard:_validate_opts(opts)
     assert(type(opts.consul_token) == "string" or opts.consul_token == nil,
            "bad consul_token parameter")
     assert(type(opts.consul_kv_prefix) == "string", "missing or bad consul_kv_prefix parameter")
+
+    assert(opts.consul_session_ttl == nil or
+               (type(opts.consul_session_ttl) == "number" and opts.consul_session_ttl >= 10 and
+                   opts.consul_session_ttl <= 86400),
+           "consul_session_ttl must be a number between 10 and 86400")
 end
 
 ---@tparam table opts available options are
@@ -108,6 +113,7 @@ end
 ---@tparam boolean opts.router
 ---@tparam boolean opts.storage
 ---@tparam boolean opts.automaster
+---@tparam number opts.consul_session_ttl
 ---
 function Autovshard.new(opts)
     local self = setmetatable({}, Autovshard)
@@ -124,6 +130,7 @@ function Autovshard.new(opts)
     self.router = opts.router and true or false
     self.storage = opts.storage and true or false
     self.automaster = opts.automaster and true or false
+    self.consul_session_ttl = opts.consul_session_ttl or 15
 
     self.consul_kv_config_path = util.urljoin(self.consul_kv_prefix, self.cluster_name,
                                               CONSUL_CONFIG_KEY)
@@ -167,7 +174,7 @@ function Autovshard:_promote_to_master(autovshard_cfg, cfg_modify_index)
     log.info("autovshard: promoting this Tarantool instance_uuid=%q to master",
              self.box_cfg.instance_uuid)
     local new_cfg = config.promote_to_master(autovshard_cfg, self.box_cfg.replicaset_uuid,
-                                       self.box_cfg.instance_uuid)
+                                             self.box_cfg.instance_uuid)
 
     -- update autovshard config in Consul
     local ok = util.ok_or_log_error(self.consul_client.put, self.consul_client,
@@ -266,7 +273,9 @@ function Autovshard:_mainloop()
                     local lock_prefix = util.urljoin(self.consul_kv_prefix, self.cluster_name,
                                                      self.box_cfg.replicaset_uuid)
                     lock = wlock.WLock.new(self.consul_client, lock_prefix, lock_weight,
-                                           lock_delay, {instance_uuid = self.box_cfg.instance_uuid})
+                                           lock_delay,
+                                           {instance_uuid = self.box_cfg.instance_uuid},
+                                           self.consul_session_ttl)
 
                     lock_fiber = fiber.new(util.ok_or_log_error, lock_manager, self.events, lock)
                     lock_fiber:name("autovshard_lock_manager", {truncate = true})

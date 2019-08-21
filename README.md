@@ -73,7 +73,7 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
     and has `address` field instead of `uri` because we don't want to
     mix config with passwords.
 
-   ### Autovshard config parameters
+   ### Autovshard Consul config parameters
 
    * `master_weight` - an instance with higher weight in a replica set eventually gets master role. This parameter is dynamic and can be changed by administrator at any time. The number is used only for comparison with the *master_weights* of the other members of a replica set.
    * `switchover_delay` - a delay in seconds to wait before taking master role away from another running instance with lower *master_weight*. This parameter is dynamic and can be changed by administrator at any time. A case when this parameter is useful is when an instance with the highest *master_weight* is restarted several times in a short amount of time. If the instance is up for a shorter time than the  *switchover_delay* there will be no master switch (switchover) every time the instance is restarted. And when the instance with the highest *master_weight* stays up for longer than the *switchover_delay* then the instance will finally get promoted to master role.
@@ -101,6 +101,7 @@ It works in dev enviromnent (docker-compose). It is still WIP. Use at your own r
        consul_http_address = "http://127.0.0.1:8500",  -- assuming Consul agent is running on localhost
        consul_token = nil,
        consul_kv_prefix = "autovshard",
+       -- consul_session_ttl = 60 -- optional, not recommended to change, default is 15 seconds
        router = true,  -- true for Vshard router instance
        storage = true,  -- true for Vshard storage instance
        automaster = true,  -- enables automatic master election and auto-failover
