@@ -183,4 +183,30 @@ function util.finally(finalizer, fn, ...) --
     return finalize(finalizer, util.ok_or_log_error(fn, ...))
 end
 
+function util.deepcompare(a, b)
+    if type(b) == "number" or type(a) == "number" then
+        if a ~= a and b ~= b then
+            return true -- nan
+        end
+        return a == b
+    end
+
+    if type(a) == "boolean" then a = (a == 1) end
+    if type(b) == "boolean" then b = (b == 1) end
+
+    if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+
+    local visited_keys = {}
+
+    for i, v in pairs(a) do
+        visited_keys[i] = true
+        if not util.deepcompare(v, b[i]) then return false end
+    end
+
+    -- check if expected contains more keys then got
+    for i, _ in pairs(b) do if visited_keys[i] ~= true then return false end end
+
+    return true
+end
+
 return util

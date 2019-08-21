@@ -50,4 +50,32 @@ describe("test util", function()
         util.table_set(t, {"a", "b", "z"}, 5)
         assert.are.same({a = {b = {c = 2, z = 5}}}, t)
     end)
+
+    it("deepcompare", function()
+        local a
+        local b
+        a = {1, 2, a = 1, b = 2, c = {d = 4}}
+        b = {b = 2, a = 1, c = {d = 4}, 1, 2}
+        assert.is_true(util.deepcompare(a, b))
+
+        a = 1
+        b = 1
+        assert.is_true(util.deepcompare(a, b))
+
+        a = "a"
+        b = "a"
+        assert.is_true(util.deepcompare(a, b))
+
+        a = {1, 2, a = 1, b = 2, c = {d = 4}}
+        b = {1, 2, a = 1, b = 2, c = {d = 99}}
+        assert.is_false(util.deepcompare(a, b))
+
+        a = {1, 2, a = 1, b = 2, c = {d = 4}}
+        b = {1, 2, a = 1, b = 2, c = {d = ""}}
+        assert.is_false(util.deepcompare(a, b))
+
+        a = {1, 2, a = 1, b = 2, c = {d = 4}}
+        b = {1, 2, a = 1, b = 2, c = {9, 8}}
+        assert.is_false(util.deepcompare(a, b))
+    end)
 end)
