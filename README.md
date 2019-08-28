@@ -19,7 +19,7 @@ centralized configuration storage in Consul.
 
 ## Status
 
-* Works in <avito.ru> in staging enviromnent.
+* Works in [Avito](https://www.avito.ru) in staging enviromnent.
 * Extensively tested. See [tests/bdd/features](tests/bdd/features) and [CI build logs](https://travis-ci.org/bofm/tarantool-autovshard/builds).
 * Still WIP. Use at your own risk. No guarantees.
 
