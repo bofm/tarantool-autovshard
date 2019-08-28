@@ -19,7 +19,9 @@ centralized configuration storage in Consul.
 
 ## Status
 
-It works in dev enviromnent (docker-compose). It is still WIP. Use at your own risk. No guarantees.
+* Works in <avito.ru> in staging enviromnent.
+* Extensively tested. See [tests/bdd/features](tests/bdd/features) and [CI build logs](https://travis-ci.org/bofm/tarantool-autovshard/builds).
+* Still WIP. Use at your own risk. No guarantees.
 
 ## Usage
 
@@ -139,7 +141,8 @@ It is recommended to run Consul agent on each server with Tarantool instances an
 
 ## TODO
 
-* [] More testing
-* [] Integration testing and CI
-* [] Improve logging
-* [] See todo's in the sources
+- [x] More testing
+- [x] Integration testing and CI
+- [x] e2e tests with Gherkin and BDD
+- [] Improve logging
+- [] See todo's in the sources
