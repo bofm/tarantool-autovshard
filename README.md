@@ -144,5 +144,5 @@ It is recommended to run Consul agent on each server with Tarantool instances an
 - [x] More testing
 - [x] Integration testing and CI
 - [x] e2e tests with Gherkin and BDD
-- [] Improve logging
-- [] See todo's in the sources
+- [ ] Improve logging
+- [ ] See todo's in the sources
