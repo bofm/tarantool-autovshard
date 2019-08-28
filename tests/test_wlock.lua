@@ -1,5 +1,6 @@
 local clock = require("clock")
 local util = require("autovshard.util")
+local yaml = require("yaml")
 
 describe("test wlock", function()
     local wlock = require("autovshard.wlock")
@@ -167,13 +168,21 @@ describe("test wlock", function()
             local msg = c:get(2)
             assert.truthy(msg)
             l, event = unpack(msg)
-            assert.are.equal(l, "l1")
-            assert.are.equal(event, "locked")
 
-            l, event = unpack(c:get(2))
-            assert.are.equal(l, "l2")
-            assert.are.equal(event, "released")
+            -- lock and release events order is arbitrary
+            if l == "l1" and event == "locked" then
+                l, event = unpack(c:get(2))
+                assert.are.equal(l, "l2")
+                assert.are.equal(event, "released")
+            else
+                assert.are.equal(l, "l2")
+                assert.are.equal(event, "released")
+                l, event = unpack(c:get(2))
+                assert.are.equal(l, "l1")
+                assert.are.equal(event, "locked")
+            end
         end)
+
     end)
     describe("lock delay", function()
         local l1, l2, done1, done2, c, events
@@ -236,6 +245,11 @@ describe("test wlock", function()
                 if msg then table.insert(events, msg) end
             until msg == nil
 
+            assert.equal(#expected_events, #events)
+            -- lock and release events order is arbitrary
+            if events[3] == "l1 released" then
+                expected_events[3], expected_events[4] = expected_events[4], expected_events[3]
+            end
             assert.are.same(expected_events, events)
         end)
     end)
