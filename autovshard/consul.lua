@@ -255,17 +255,27 @@ function ConsulClient:watch(opts)
     return watcher, util.partial(done_ch.close, done_ch)
 end
 
-local function make_request(http_client, baseurl, default_headers)
-    assert(baseurl, "baseurl must be set")
+local function make_request(http_client, http_addresses, default_headers)
+    assert(type(http_addresses) == "table", "baseurl must be a table")
+
+    local function is_bad_response(response)
+        return not response or not response.headers or
+                   (response.status and response.status >= 500 and response.status < 600)
+    end
+
+    local address_count = #http_addresses
+    local next_address = util.cycle(http_addresses)
+    local address = next_address()
+
     return function(options)
         assert(options.method, "method must be set")
         local url
         if options.url then
-            url = util.urljoin(baseurl, options.url)
+            url = util.urljoin(address, "v1", options.url)
         elseif options.url_path then
             assert(type(options.url_path) == "table" and #options.url_path > 0,
                    "url_path must be a non-empty array")
-            url = util.urljoin(baseurl, unpack(options.url_path))
+            url = util.urljoin(address, "v1", unpack(options.url_path))
         else
             error("url or url_path must be set")
         end
@@ -280,16 +290,31 @@ local function make_request(http_client, baseurl, default_headers)
         local opts = {timeout = options.timeout or HTTP_TIMEOUT, headers = headers}
         if options.opts then util.table_update(opts, options.opts) end
         -- log.info(require("yaml").encode({"request", options.method, url, {body = body}, opts}))
-        return http_client:request(options.method, url, body, opts)
+        local response = util.ok_or_log_error(http_client.request, http_client, options.method,
+                                              url, body, opts)
+        if address_count > 1 and is_bad_response(response) then --
+            log.error("Got bad Consul HTTP response from %q. Will try another address.", address)
+            address = next_address()
+        end
+        return response
     end
 end
 
 --- Create Consul client
+-- @tparam ?string|table consul_http_address
 -- @tparam table opts available options are:
 -- @tparam string opts.token
 -- @return consul client
 function ConsulClient.new(consul_http_address, opts)
-    consul_http_address = consul_http_address or "http://localhost:8500"
+    if consul_http_address == nil then
+        consul_http_address = {"http://localhost:8500"}
+    elseif type(consul_http_address) == "table" then
+        -- ok
+    elseif type(consul_http_address) == "string" then
+        consul_http_address = {consul_http_address}
+    else
+        error("bad consul_http_address: " .. tostring(consul_http_address))
+    end
     if opts and type(opts) ~= "table" then error("opts must be a table or nil") end
 
     local c = {}
@@ -298,8 +323,7 @@ function ConsulClient.new(consul_http_address, opts)
     local default_headers = {["X-Consul-Token"] = opts and opts.token or nil}
     c.http_client = http.new({1})
     c.http_address = consul_http_address
-    c.request = make_request(c.http_client, util.urljoin(consul_http_address, "v1"),
-                             default_headers)
+    c.request = make_request(c.http_client, consul_http_address, default_headers)
     assert(c.request)
     return setmetatable(c, ConsulClient)
 end

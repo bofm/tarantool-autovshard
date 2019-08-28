@@ -209,4 +209,17 @@ function util.deepcompare(a, b)
     return true
 end
 
+function util.cycle(t)
+    local n = #t
+    if n == 1 then
+        local res = t[1]
+        return function() return res end
+    end
+    local i = 1
+    return function()
+        i = i >= n and 1 or i + 1
+        return t[i]
+    end
+end
+
 return util

@@ -90,8 +90,15 @@ function Autovshard:_validate_opts(opts)
     assert(type(opts.cluster_name == "string"), "missing or bad cluster_name parameter")
     assert(type(opts.password) == "string", "missing or bad password parameter")
     assert(type(opts.login) == "string", "missing or bad login parameter")
-    assert(type(opts.consul_http_address) == "string",
-           "missing or bad consul_http_address parameter")
+
+    if type(opts.consul_http_address) == "table" then
+        for _, a in pairs(opts.consul_http_address) do
+            assert(type(a) == "string", "missing or bad consul_http_address parameter")
+        end
+    else
+        assert(type(opts.consul_http_address) == "string",
+               "missing or bad consul_http_address parameter")
+    end
     assert(type(opts.consul_token) == "string" or opts.consul_token == nil,
            "bad consul_token parameter")
     assert(type(opts.consul_kv_prefix) == "string", "missing or bad consul_kv_prefix parameter")
@@ -107,7 +114,7 @@ end
 ---@tparam string opts.cluster_name
 ---@tparam string opts.login
 ---@tparam string opts.password
----@tparam string opts.consul_http_address
+---@tparam string|table opts.consul_http_address
 ---@tparam string opts.consul_token
 ---@tparam string opts.consul_kv_prefix
 ---@tparam boolean opts.router
