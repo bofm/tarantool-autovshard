@@ -142,26 +142,25 @@ describe("test wlock", function()
 
         it("weight", function()
             assert.truthy(c)
-            local l1_locked
+            local l2_locked = fiber.channel()
             local f1 = fiber.new(function(c, done1)
-                l1_locked = l1:acquire(done1)
+                assert.is_nil(l2_locked:get(10))
+                assert(l1:acquire(done1))
                 c:put{"l1", "locked"}
                 done1:get()
                 c:put{"l1", "released"}
             end, c, done1)
 
-            local l2_locked
             local f2 = fiber.new(function(c, done2)
-                l2_locked = l2:acquire(done2)
+                l2:acquire(done2)
+                l2_locked:close()
                 c:put{"l2", "locked"}
                 done2:get()
                 c:put{"l2", "released"}
             end, c, done2)
 
             local l, event = unpack(c:get(2))
-            assert.are.equal(l, "l2")
-            assert.are.equal(event, "locked")
-            assert.is_true(l2_locked)
+            assert.is_true(l2_locked:is_closed())
             assert.is_nil(c:get(1))
 
             l1:set_weight(30)
