@@ -71,11 +71,11 @@ centralized configuration storage in Consul.
    cat autovshard_cfg.yaml | consul kv put "autovshard/mycluster/autovshard_cfg_yaml" -
    ```
 
-   The config is similar to Vshard config, but it has some extra fields
-    and has `address` field instead of `uri` because we don't want to
-    mix config with passwords.
-
    ### Autovshard Consul config parameters
+   
+   The config is similar to Vshard config, but it has some extra fields
+   and has `address` field instead of `uri` because we don't want to
+   mix config with passwords.
 
    * `master_weight` - an instance with higher weight in a replica set eventually gets master role. This parameter is dynamic and can be changed by administrator at any time. The number is used only for comparison with the *master_weights* of the other members of a replica set.
    * `switchover_delay` - a delay in seconds to wait before taking master role away from another running instance with lower *master_weight*. This parameter is dynamic and can be changed by administrator at any time. A case when this parameter is useful is when an instance with the highest *master_weight* is restarted several times in a short amount of time. If the instance is up for a shorter time than the  *switchover_delay* there will be no master switch (switchover) every time the instance is restarted. And when the instance with the highest *master_weight* stays up for longer than the *switchover_delay* then the instance will finally get promoted to master role.
@@ -119,8 +119,28 @@ centralized configuration storage in Consul.
    -- package.reload:register(autovshard, autovshard.stop)
 
    ```
+    
+    **Important:** If Consul is unreachable the Tarantool instance is set to **read-only** mode.
 
- **Important:** If Consul is unreachable the Tarantool instance is set to **read-only** mode.
+    ### Autovshard Tarantool config parameters
+    
+    * `box_cfg` - table, parameters for `box.cfg` call 
+    * `cluster_name` - string, the name of your sharding cluster
+    * `login` - string, login for Vshard
+    * `password` - string, password for Vshard
+    * `consul_http_address` - a string with Consul address or a table of multiple Consul addresses.
+       Examples: `http://127.0.0.1:8500`, `{"https://consul1.example.com:8501", "https://consul2.example.com:8501"}`
+       If multiple Consul addresses are set and Consul is unreachable at an address, Autovshard will use the
+       next address from the array for the subsequent requests to Consul.
+       **None**: All addresses must point to the instances of the same Consul cluster in the
+       same [Consul datacenter](https://www.consul.io/docs/commands/catalog/datacenters.html). 
+    * `consul_token` - optional string, Consul token (if you use ACLs)
+    * `consul_kv_prefix` - string, a prefix in Consul KV storage. Must be the same on all instances in a Tarantool cluster.
+    * `consul_session_ttl` - optional number, Consul session TTL. Not recommended to change, default is 15 seconds. Must be
+       between 10 and 86400.
+    * `router` - boolean, true for Vshard router instances
+    * `storage` - boolean, - true for Vshard storage instance
+    * `automaster` - boolean, enables automatic master election and auto-failover
 
 ### See also
 
