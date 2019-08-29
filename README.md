@@ -129,7 +129,7 @@ centralized configuration storage in Consul.
     * `login` - string, login for Vshard
     * `password` - string, password for Vshard
     * `consul_http_address` - a string with Consul address or a table of multiple Consul addresses.
-       Examples: `http://127.0.0.1:8500`, `{"https://consul1.example.com:8501", "https://consul2.example.com:8501"}`
+       Examples: `"http://127.0.0.1:8500"`, `{"https://consul1.example.com:8501", "https://consul2.example.com:8501"}`
        If multiple Consul addresses are set and Consul is unreachable at an address, Autovshard will use the
        next address from the array for the subsequent requests to Consul.
        **None**: All addresses must point to the instances of the same Consul cluster in the
