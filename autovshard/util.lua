@@ -215,7 +215,7 @@ function util.cycle(t)
         local res = t[1]
         return function() return res end
     end
-    local i = 1
+    local i = 0
     return function()
         i = i >= n and 1 or i + 1
         return t[i]

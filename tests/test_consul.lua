@@ -154,4 +154,19 @@ describe("test consul", function()
             assert.are.same(expected_changes, changes)
         end)
     end)
+
+    it("multiple addresses", function()
+        xzz = 1
+        local addresses = {"http://localhost:60666", assert(os.getenv("CONSUL_HTTP_ADDR"))}
+        local client = consul.ConsulClient.new(addresses)
+        local put = function() return client:put("a", "1") end
+        assert.has_error(put)
+        -- should swithch to the next address if got error
+        assert.is_true(put())
+        -- should not swithch to the next address if no errors
+        assert.is_true(put())
+        assert.is_nil(client:get("no-such-key"))
+        -- should not swithch to the next address if not found a key
+        assert.is_true(put())
+    end)
 end)

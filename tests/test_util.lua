@@ -78,4 +78,15 @@ describe("test util", function()
         b = {1, 2, a = 1, b = 2, c = {9, 8}}
         assert.is_false(util.deepcompare(a, b))
     end)
+
+    it("cycle", function()
+        local xs = {1,2,3}
+        local getnext= util.cycle(xs)
+        local t = {}
+        for i=1,10 do
+            table.insert(t, getnext())
+        end
+        local expected_t = {1,2,3,1,2,3,1,2,3,1}
+        assert.are.same(expected_t, t)
+    end)
 end)

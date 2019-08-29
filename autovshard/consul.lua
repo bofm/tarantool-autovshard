@@ -98,7 +98,6 @@ function ConsulClient:put(key, value, cas, acquire)
     }
     if response.status == 200 then
         local body = json.decode(response.body)
-        assert(type(body) == "boolean")
         return body == true
     else
         error(string.format("consul kv put error: %s", yaml.encode(response)))
