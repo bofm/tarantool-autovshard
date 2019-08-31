@@ -254,6 +254,7 @@ def check_tarantool_logs(logs: str):
         in l,
         lambda l: "Exception during calling 'vshard.storage.buckets_count' on " in l
         and ": Invalid argument" in l,
+        lambda l: '"code":77,"message":"Connection refused"' in l,
     ]
     all_errors = lfilter(lambda l: "E>" in l, lines)
     is_real_error = none_fn(*is_ok)
