@@ -317,4 +317,4 @@ function Autovshard:start()
     return true
 end
 
-return {Autovshard = Autovshard, _VERSION = "0.2.0"}
+return {Autovshard = Autovshard, _VERSION = "0.2.1"}
