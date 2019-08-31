@@ -153,7 +153,14 @@ Luarocks sucks at pinning dependencies, and Vshard does not support (as of 2019-
 installation without Tarantool sources. Therefore Vshard is not mentioned in the rockspec.
 
 1. Install Vshard first.
-2. Install Autovshard. Autovshard depends only on Vshard.
+2. Install Autovshard. Autovshard depends only on Vshard. Replace `<version>` with the [version](rockspecs) you want to install:
+   ```
+   luarocks install "https://raw.githubusercontent.com/bofm/tarantool-autovshard/master/rockspecs/autovshard-<version>-1.rockspec"
+   ```
+   or
+   ```
+   tarantoolctl rocks install "https://raw.githubusercontent.com/bofm/tarantool-autovshard/master/rockspecs/autovshard-<version>-1.rockspec"
+   ```
 
 ## Notes on Consul
 
