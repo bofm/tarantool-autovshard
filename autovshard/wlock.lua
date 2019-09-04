@@ -4,6 +4,17 @@
 --   2. Wait. Wlock can be configured to wait for `delay` before acquiring the
 --      lock which is already held by other contender with lower weight.
 --
+-- Inspired by: <https://learn.hashicorp.com/consul/developer-configuration/semaphore>
+--
+-- Consul KV store structure:
+--  <prefix>/session1: value={weight:10}, session=session1
+--  <prefix>/session2: value={weight:20}, session=session2
+--  <prefix>/lock: value={holder:session2}
+--
+-- The lock is considered held if there are:
+--   * a `session key` with an alive Consul session associated with the key
+--   * a `lock key` with the session (a Wlock holder) as the `holder` field value
+--
 local json = require("json")
 local fiber = require("fiber")
 local log = require("log")

@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/bofm/tarantool-autovshard.svg?branch=master)](https://travis-ci.org/bofm/tarantool-autovshard) [![Coverage Status](https://coveralls.io/repos/github/bofm/tarantool-autovshard/badge.svg?branch=coverage)](https://coveralls.io/github/bofm/tarantool-autovshard?branch=coverage)
 
-A wrapper around [Vshard](https://github.com/tarantool/vshard) with automatic master election, failover and
+A wrapper around Tarantool [Vshard](https://github.com/tarantool/vshard) with automatic master election, failover and
 centralized configuration storage in Consul.
 
 [![Sponsored by Avito](https://cdn.rawgit.com/css/csso/8d1b89211ac425909f735e7d5df87ee16c2feec6/docs/avito.svg)](https://www.avito.ru/)
@@ -161,6 +161,14 @@ installation without Tarantool sources. Therefore Vshard is not mentioned in the
    ```
    tarantoolctl rocks install "https://raw.githubusercontent.com/bofm/tarantool-autovshard/master/rockspecs/autovshard-<version>-1.rockspec"
    ```
+
+## How it works
+
+Internally Autovshard does 2 things (which are almost independent of each other):
+* Watch the config in Consul and apply it as soon as it changes. Whatever the config is, it is converted to Vshard config and passed to `vshard.storage.cfg()` and `vshard.router.cfg()` according to the parameters of the Autovshard Tarantool config. If Consul is unreachable, Autovshard sets the Tarantool instance to read-only mode to avoid having multiple master instances in a replicaset (this feature is called *fencing*).
+* Maintain master election with a distributed lock and change the config in Consul when the lock is acquired. This is done only on Vshard storage instances when `automaster` is enabled. **Autovshard only changes `master` field** of the Autovshard Consul config.
+
+You can check out [CI e2e tests logs](https://travis-ci.org/bofm/tarantool-autovshard/builds) to get familiar with what Autovshard prints to the Tarantool log in different situations.
 
 ## Notes on Consul
 
