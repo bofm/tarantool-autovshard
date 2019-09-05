@@ -18,10 +18,6 @@ autovshard = require("autovshard").Autovshard.new{
 autovshard:start()
 package.reload:register(autovshard, autovshard.stop)
 
-box.ctl.wait_rw()
-
-box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
-
 function test(x)
     local bucket_id = vshard.router.bucket_id(x)
     return vshard.router.callrw(bucket_id, "tostring", {"test ok"})
