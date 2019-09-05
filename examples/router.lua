@@ -38,7 +38,6 @@ function delete(x, ...)
     return vshard.router.callrw(bucket_id, "delete", {x, bucket_id, ...})
 end
 
-
 box.ctl.wait_rw()
 
 box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
