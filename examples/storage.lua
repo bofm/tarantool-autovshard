@@ -1,3 +1,5 @@
+local fiber = require("fiber")
+
 require("package.reload")
 
 vshard = require("vshard")
@@ -34,28 +36,39 @@ function put(x, bucket_id, ...)
     return box.space.test:put(box.tuple.new(x, bucket_id, ...))
 end
 
-function get(x)
+function get(x) --
     return box.space.test:get(x)
 end
 
-function delete(x)
+function delete(x) --
     return box.space.test:delete(x)
 end
 
+local function err_if_not_started()
+    -- check if tarantool instance bootstrap is done
+    box.info()
+    -- check if vshard cfg is applied
+    vshard.storage.buckets_count()
+end
+repeat fiber.sleep(0.1) until pcall(err_if_not_started)
 
--- wait for tarantool master instance bootstrap
-box.ctl.wait_rw()
+if not box.info().ro then
+    -- perform write operation
 
--- perform write operation
-box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
-box.once("schema.v1.space.test", function()
-    --
-    local s = box.schema.space.create("test")
-    s:format({
-        { 'id', 'unsigned' },
-        { 'bucket_id', 'unsigned' },
-        { 'data', 'scalar' },
+    -- Not using box.once because it is not compatible with package.reload.
+    -- box.once calls box.ctl.wait_rw() internally.
+    -- And box.ctl.wait_rw blocks forever on subsequent calls on a RW instance.
+
+    box.schema.user.grant('guest', 'super', nil, nil, {if_not_exists = true})
+
+    local s = box.schema.space.create("test", {
+        format = { --
+            {'id', 'unsigned'}, --
+            {'bucket_id', 'unsigned'}, --
+            {'data', 'scalar'}, --
+        },
+        if_not_exists = true,
     })
-    s:create_index("pk", { parts = { 'id' } })
-    s:create_index("bucket_id", { parts = { 'bucket_id' }, unique = false })
-end)
+    s:create_index("pk", {parts = {'id'}, if_not_exists = true})
+    s:create_index("bucket_id", {parts = {'bucket_id'}, unique = false, if_not_exists = true})
+end

@@ -1,8 +1,10 @@
+local fiber = require("fiber")
+
 require("package.reload")
 
 vshard = require("vshard")
 
-local box_cfg = {listen = 3301, feedback_enabled = false}
+local box_cfg = {listen = 3301, wal_mode = "none", feedback_enabled = false}
 
 autovshard = require("autovshard").Autovshard.new{
     box_cfg = box_cfg,
@@ -38,6 +40,14 @@ function delete(x, ...)
     return vshard.router.callrw(bucket_id, "delete", {x, bucket_id, ...})
 end
 
-box.ctl.wait_rw()
+local function err_if_not_started()
+    -- check if tarantool instance bootstrap is done
+    box.info()
+    -- check if vshard cfg is applied
+    vshard.router.bucket_count()
+end
+repeat fiber.sleep(0.1) until pcall(err_if_not_started)
 
-box.once("schema.v1.grant.guest.super", box.schema.user.grant, "guest", "super")
+if not box.info().ro then --
+    box.schema.user.grant('guest', 'super', nil, nil, {if_not_exists = true})
+end
