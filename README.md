@@ -112,8 +112,8 @@ centralized configuration storage in Consul.
    autovshard:start()  -- autovshard will run in the background
    -- to stop it call autovshard:stop()
 
-   -- This might be helpful
-   -- box.ctl.on_shutdown(function() autovshard:stop() end)
+   -- This might be helpful (Tarantool >= 2.0)
+   -- box.ctl.on_shutdown(function() autovshard:stop(); require("fiber").sleep(2) end)
 
    -- If you use package.reload (https://github.com/moonlibs/package-reload)
    -- package.reload:register(autovshard, autovshard.stop)
