@@ -320,4 +320,4 @@ function Autovshard:start()
     return true
 end
 
-return {Autovshard = Autovshard, _VERSION = "0.2.1"}
+return {Autovshard = Autovshard, _VERSION = "1.0.0"}
