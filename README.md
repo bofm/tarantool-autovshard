@@ -152,7 +152,7 @@ centralized configuration storage in Consul.
 Luarocks sucks at pinning dependencies, and Vshard does not support (as of 2019-07-01) painless
 installation without Tarantool sources. Therefore Vshard is not mentioned in the rockspec.
 
-1. Install Vshard first.
+1. Install [Vshard](https://github.com/tarantool/vshard) first.
 2. Install Autovshard. Autovshard depends only on Vshard. Replace `<version>` with the [version](rockspecs) you want to install:
    ```
    luarocks install "https://raw.githubusercontent.com/bofm/tarantool-autovshard/master/rockspecs/autovshard-<version>-1.rockspec"
@@ -172,7 +172,7 @@ You can check out [CI e2e tests logs](https://travis-ci.org/bofm/tarantool-autov
 
 ## Notes on Consul
 
-It is recommended to run Consul agent on each server with Tarantool instances and set `consul_http_address` to the address of Consul agent on localhost.
+It is recommended to run Consul agent on each server with Tarantool instances and set `consul_http_address` to the address of the agent on localhost.
 
 ## TODO
 
