@@ -167,6 +167,9 @@ function Autovshard:_vshard_apply_config(vshard_cfg)
 end
 
 function Autovshard:_set_instance_read_only(autovshard_cfg)
+    local _, already_read_only = pcall(function() return box.info().ro end)
+    if already_read_only then return end
+
     local vshard_cfg = config.make_vshard_config(autovshard_cfg, self.login, self.password,
                                                  self.box_cfg)
     local changed, new_vshard_cfg = config.set_instance_read_only(vshard_cfg,
