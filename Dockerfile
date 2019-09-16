@@ -12,7 +12,7 @@ RUN cd /tmp/ \
     && echo "---------- vshard --------------" \
     && git clone https://github.com/tarantool/vshard.git \
     && cd vshard \
-    && git checkout -q 65365b2 \
+    && git checkout -q d5faa9c \
     && mv vshard /usr/share/tarantool/vshard \
     && cd /tmp \
     && rm -rf vshard \
