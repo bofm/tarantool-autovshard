@@ -44,7 +44,7 @@ local function lock_manager(events, lock)
 end
 
 local function watch_config(events, consul_client, consul_kv_config_path)
-    _, stop_watching = consul_client:watch{
+    local _, stop_watching = consul_client:watch{
         key = consul_kv_config_path,
         on_change = function(kv)
             if kv and kv.value then
