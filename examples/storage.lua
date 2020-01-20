@@ -7,6 +7,8 @@ vshard = require("vshard")
 local box_cfg = {
     listen = 3301,
     feedback_enabled = false,
+    replication_connect_quorum = 0,
+    replication_connect_timeout=1,
     instance_uuid = assert(os.getenv("TARANTOOL_INSTANCE_UUID"),
                            "TARANTOOL_INSTANCE_UUID env variable must be set"),
     replicaset_uuid = assert(os.getenv("TARANTOOL_REPLICASET_UUID"),

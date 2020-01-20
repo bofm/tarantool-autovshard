@@ -91,6 +91,8 @@ centralized configuration storage in Consul.
        listen = 3301,  -- required
        instance_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",  -- required for storage instances, prefer lowercase
        replicaset_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",  -- required for storage instances, prefer lowercase
+       replication_connect_quorum = 0,  -- recommended, search Tarantool issue tracker for "quorum" and "bootstrap"
+       replication_connect_timeout=5,  -- to start faster when some replicas are unavailable
        -- ! DO NOT set `replication` parameter, Vshard will take care of it
        -- specify any other_box_cfg options
    }

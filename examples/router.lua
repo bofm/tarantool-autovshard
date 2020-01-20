@@ -4,7 +4,13 @@ require("package.reload")
 
 vshard = require("vshard")
 
-local box_cfg = {listen = 3301, wal_mode = "none", feedback_enabled = false}
+local box_cfg = {
+    listen = 3301,
+    wal_mode = "none",
+    feedback_enabled = false,
+    replication_connect_quorum = 0,
+    replication_connect_timeout=1,
+}
 
 autovshard = require("autovshard").Autovshard.new{
     box_cfg = box_cfg,
