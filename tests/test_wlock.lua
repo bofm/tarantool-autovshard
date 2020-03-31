@@ -35,6 +35,7 @@ describe("test wlock", function()
     end)
 
     before_each(function()
+        wait_consul()
         local c = require("http.client").new()
         local resp = c:delete(os.getenv("CONSUL_HTTP_ADDR") .. "/v1/kv/test?recurse=")
         assert(resp.status == 200, resp)
