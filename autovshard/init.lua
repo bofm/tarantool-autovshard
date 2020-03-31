@@ -272,7 +272,6 @@ function Autovshard:_mainloop()
     local lock
     local stop_locking = function() end
 
-    local locked = false
     local bootstrap_done = false
 
     local stop_watch_config = function() end
@@ -317,7 +316,6 @@ function Autovshard:_mainloop()
                 autovshard.events:close()
             end,
             ["on" .. STATE_FOLLOWER] = function(self, event, from, to)
-                log.info("inside follower, cfg=%q", cfg)
                 if is_storage() and automaster() and cfg then
                     -- maybe update lock weight
                     local lock_weight = assert(config.get_master_weight(cfg, autovshard.box_cfg
@@ -358,8 +356,10 @@ function Autovshard:_mainloop()
                 fiber.new(function() autovshard.events:put{EVENT_PROMOTED} end)
             end,
             ["onleave" .. STATE_PROMOTING] = function(self, event, from, to)
-                states_with_locking = {STATE_FOLLOWER, STATE_PROMOTING, STATE_LEADER}
-                if not states_with_locking[to] then stop_locking() end
+                local states_with_locking = {STATE_FOLLOWER, STATE_PROMOTING, STATE_LEADER}
+                if not util.has(states_with_locking, to) then --
+                    stop_locking()
+                end
                 if to ~= STATE_PROMOTING then stop_watching_rs_members() end
             end,
             ["onleave" .. STATE_DONE] = function(self, event, from, to)
@@ -414,7 +414,7 @@ function Autovshard:_mainloop()
         },
     })
 
-    local function put_event(e, ...) --
+    local function machine_event(e, ...) --
         if machine:can(e) then machine[e](machine, ...) end
     end
 
@@ -426,7 +426,7 @@ function Autovshard:_mainloop()
         if msg == nil then break end
         local event, data = unpack(msg)
         log.info("autovshard: got event: %s", event)
-        put_event(event, data)
+        machine_event(event, data)
     end
 end
 
