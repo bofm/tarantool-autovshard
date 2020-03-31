@@ -22,5 +22,6 @@ build = {
     ["autovshard.consul"] = "autovshard/consul.lua",
     ["autovshard.wlock"] = "autovshard/wlock.lua",
     ["autovshard.config"] = "autovshard/config.lua",
+    ["autovshard.fsm"] = "autovshard/fsm.lua",
   }
 }

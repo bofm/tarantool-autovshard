@@ -3,7 +3,7 @@ local log = require("log")
 local fiber = require("fiber")
 local vshard = require("vshard")
 
-local fsm = require("fsm")
+local fsm = require("autovshard.fsm")
 local consul = require("autovshard.consul")
 local util = require("autovshard.util")
 local wlock = require("autovshard.wlock")
@@ -20,6 +20,7 @@ local EVENT_LOCK_RELEASED = "LOCK_RELEASED"
 local EVENT_NEW_CONFIG = "NEW_CONFIG"
 local EVENT_CONFIG_REMOVED = "CONFIG_REMOVED"
 local EVENT_CONSUL_ERROR = "CONSUL_ERROR"
+local EVENT_PROMOTED = "PROMOTED"
 
 local function lock_manager(events, lock)
     local done
@@ -230,20 +231,20 @@ function Autovshard:_watch_rs_members_info()
 end
 
 function Autovshard:_promote_to_master(autovshard_cfg, cfg_modify_index)
-    -- 1. set all to RO
-    local ro_cfg = config.set_replicaset_read_only(autovshard_cfg, self.box_cfg.replicaset_uuid)
-    -- update autovshard config in Consul
-    local ok = util.ok_or_log_error(self.consul_client.put, self.consul_client,
-                                    self.consul_kv_config_path, config.encode(ro_cfg),
-                                    cfg_modify_index)
-    if not ok then
-        log.error(
-            "autovshard: failed to set replicaset_uuid=%q instances to RO mode while promoting " ..
-                "this Tarantool instance_uuid=%q to master, will retry later", self,
-            self.box_cfg.replicaset_uuid, self.box_cfg.instance_uuid)
-    end
-    -- 2. wait for all to apply config
-    while true do for c in connections do end end
+    -- -- 1. set all to RO
+    -- local ro_cfg = config.set_replicaset_read_only(autovshard_cfg, self.box_cfg.replicaset_uuid)
+    -- -- update autovshard config in Consul
+    -- local ok = util.ok_or_log_error(self.consul_client.put, self.consul_client,
+    --                                 self.consul_kv_config_path, config.encode(ro_cfg),
+    --                                 cfg_modify_index)
+    -- if not ok then
+    --     log.error(
+    --         "autovshard: failed to set replicaset_uuid=%q instances to RO mode while promoting " ..
+    --             "this Tarantool instance_uuid=%q to master, will retry later", self,
+    --         self.box_cfg.replicaset_uuid, self.box_cfg.instance_uuid)
+    -- end
+    -- -- 2. wait for all to apply config
+    -- while true do for c in connections do end end
 
     -- 3. set self to RW
     log.info("autovshard: promoting this Tarantool instance_uuid=%q to master",
@@ -263,50 +264,44 @@ function Autovshard:_promote_to_master(autovshard_cfg, cfg_modify_index)
 end
 
 function Autovshard:_mainloop()
-    self._done = fiber.channel()
+    self.events = fiber.channel()
 
     local cfg
     local cfg_modify_index
 
     local lock
-    local lock_fiber
+    local stop_locking = function() end
 
     local locked = false
     local bootstrap_done = false
 
     local stop_watch_config = function() end
+    local stop_watching_rs_members = function() end
 
     local function automaster() return self.automaster end
     local function is_storage() return self.storage end
 
     local STATE_INIT = "none"
     local STATE_FOLLOWER = "FOLLOWER"
-    local STATE_CANDIDATE = "CANDIDATE"
     local STATE_PROMOTING = "PROMOTING"
     local STATE_LEADER = "LEADER"
     local STATE_DETACHED = "DETACHED"
     local STATE_DONE = "DONE"
 
+    local autovshard = self
+
     local machine = fsm.create({
         events = {
-            {
-                name = EVENT_START,
-                from = STATE_INIT,
-                to = automaster() and STATE_CANDIDATE or STATE_FOLLOWER,
-            }, --
-            {
-                name = EVENT_NEW_CONFIG,
-                from = {STATE_FOLLOWER, STATE_CANDIDATE, STATE_DETACHED},
-                to = automaster() and STATE_CANDIDATE or STATE_FOLLOWER,
-            }, --
+            {name = EVENT_START, from = STATE_INIT, to = STATE_FOLLOWER}, --
+            {name = EVENT_NEW_CONFIG, from = {STATE_FOLLOWER, STATE_DETACHED}, to = STATE_FOLLOWER}, --
             {name = EVENT_NEW_CONFIG, from = STATE_PROMOTING, to = STATE_PROMOTING}, --
             {name = EVENT_NEW_CONFIG, from = STATE_LEADER, to = STATE_LEADER}, --
             {name = EVENT_CONFIG_REMOVED, from = "*", to = STATE_DETACHED},
-            {name = EVENT_LOCK_LOCKED, from = STATE_CANDIDATE, to = STATE_PROMOTING}, --
+            {name = EVENT_LOCK_LOCKED, from = STATE_FOLLOWER, to = STATE_PROMOTING}, --
             {
                 name = EVENT_LOCK_RELEASED,
                 from = {STATE_PROMOTING, STATE_LEADER},
-                to = automaster() and STATE_CANDIDATE or STATE_FOLLOWER,
+                to = STATE_FOLLOWER,
             }, --
             {name = EVENT_PROMOTED, from = STATE_PROMOTING, to = STATE_LEADER}, --
             {name = EVENT_CONSUL_ERROR, from = "*", to = STATE_DETACHED}, --
@@ -314,29 +309,101 @@ function Autovshard:_mainloop()
         },
         callbacks = {
             ["on" .. EVENT_START] = function(self, event, from, to)
-                stop_watch_config = watch_config(self.events, self.consul_client,
-                                                 self.consul_kv_config_path)
+                stop_watch_config = watch_config(autovshard.events, autovshard.consul_client,
+                                                 autovshard.consul_kv_config_path)
             end,
             ["on" .. STATE_DONE] = function(self, event, from, to)
                 stop_watch_config()
-                self._done:close()
+                autovshard.events:close()
             end,
-            ["on" .. STATE_CANDIDATE] = function(self, event, from, to)
-                start_lock_aquiring()
+            ["on" .. STATE_FOLLOWER] = function(self, event, from, to)
+                if is_storage() and automaster() and bootstrap_done then
+                    -- maybe update lock weight
+                    local lock_weight = assert(config.get_master_weight(cfg, autovshard.box_cfg
+                                                                            .instance_uuid),
+                                               "cannot get master weight")
+                    if lock and lock_weight ~= lock.weight then
+                        util.ok_or_log_error(lock.set_weight, lock, lock_weight)
+                    end
+
+                    -- maybe update lock delay
+                    local lock_delay = config.get_switchover_delay(cfg, autovshard.box_cfg
+                                                                       .instance_uuid) or 0
+                    if lock and lock_delay ~= lock.delay then
+                        util.ok_or_log_error(lock.set_delay, lock, lock_delay)
+                    end
+
+                    -- start lock manager
+                    if not lock_fiber then
+                        local lock_prefix = util.urljoin(autovshard.consul_kv_prefix,
+                                                         autovshard.cluster_name,
+                                                         autovshard.box_cfg.replicaset_uuid)
+                        lock = wlock.WLock.new(autovshard.consul_client, lock_prefix, lock_weight,
+                                               lock_delay,
+                                               {instance_uuid = autovshard.box_cfg.instance_uuid},
+                                               autovshard.consul_session_ttl)
+
+                        lock_fiber = fiber.new(util.ok_or_log_error, lock_manager,
+                                               autovshard.events, lock)
+                        lock_fiber:name("autovshard_lock_manager", {truncate = true})
+                        stop_locking = util.partial(pcall, lock_fiber.cancel, lock_fiber)
+                    end
+                end
             end,
             ["on" .. STATE_PROMOTING] = function(self, event, from, to)
-                hold_lock()
-                start_rs_state_monitor()
-                set_rs_read_only()
+                local chan
+                -- chan, stop_watching_rs_members = autovshard:_watch_rs_members_info()
+                -- set_rs_read_only()
+                fiber.new(function() autovshard.events:put(EVENT_PROMOTED) end)
             end,
             ["onleave" .. STATE_PROMOTING] = function(self, event, from, to)
-                if to ~= from and to ~= STATE_LEADER then --
-                    stop_holding_lock()
-                end
-                if to ~= from then stop_rs_state_monitor() end
+                states_with_locking = {STATE_FOLLOWER, STATE_PROMOTING, STATE_LEADER}
+                if not states_with_locking[to] then stop_locking() end
+                if to ~= STATE_PROMOTING then stop_watching_rs_members() end
             end,
             ["onleave" .. STATE_DONE] = function(self, event, from, to)
                 return false -- never leave STATE_DONE
+            end,
+            ["on" .. STATE_DETACHED] = function(self, event, from, to)
+                if autovshard.storage and cfg and pcall(box.info) then
+                    autovshard:_set_instance_read_only(cfg)
+                end
+            end,
+            ["on" .. STATE_LEADER] = function(self, event, from, to)
+                if (not config.is_master(cfg, self.box_cfg.instance_uuid) or
+                    not config.master_count(cfg, self.box_cfg.replicaset_uuid) == 1) then
+                    autovshard:_promote_to_master(cfg, cfg_modify_index)
+                end
+            end,
+            ["on" .. EVENT_NEW_CONFIG] = function(self, event, from, to, new_cfg, cfg_modify_index)
+                assert(new_cfg, "autovshard: missing cfg in EVENT_NEW_CONFIG")
+                assert(cfg_modify_index, "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
+                cfg = new_cfg
+                -- reconfigure vshard
+                if is_storage() and not bootstrap_done and
+                    config.master_count(cfg, autovshard.box_cfg.replicaset_uuid) ~= 1 then
+                    -- For storage instances we need to check for bootstrap_done to
+                    -- handle the case when this is the first ever call to
+                    -- vshard.storage.cfg(cfg) on current instance.
+                    -- If there is no master defined in cfg for the current
+                    -- replica set, then vshard.storage.cfg call will block forever
+                    -- with this messages in log:
+                    --
+                    -- E> ER_LOADING: Instance bootstrap hasn't finished yet
+                    -- I> will retry every 1.00 second
+                    --
+                    -- During bootstrap we should first elect master, so we ignore
+                    -- the config when no master is set for current replica set.
+                    log.info("autovshasrd: won't apply the config, master_count != 1, " ..
+                                 "cannot bootstrap with this config.")
+                else
+                    -- [TODO] do not apply new config if it is the same as the current one
+                    local vshard_cfg = config.make_vshard_config(cfg, autovshard.login,
+                                                                 autovshard.password,
+                                                                 autovshard.box_cfg)
+                    autovshard:_vshard_apply_config(vshard_cfg, cfg_modify_index)
+                    bootstrap_done = true
+                end
             end,
             onstatechange = function(self, event, from, to)
                 if from ~= to then log.info("autovshard: entered state %s", to) end
@@ -344,107 +411,20 @@ function Autovshard:_mainloop()
         },
     })
 
+    local function put_event(e, ...)
+        if machine:can(e) then machine[EVENT_START](machine, ...) end
+    end
+
     while true do
         -- ! To avoid deadlock DO NOT put into `self.events` channel IN THIS FIBER.
         -- * Only get events from `self.events` channel and react to the events.
+        machine[EVENT_START](machine)
         local msg = self.events:get()
-        local event, data = unpack(msg)
+        if msg == nil then break end
+        local event, args = unpack(msg)
         log.info("autovshard: got event: %s", event)
-
-        if event == EVENT_STOP then
-            self.events:close()
-            stop_watch_config()
-            if lock_fiber then pcall(lock_fiber.cancel, lock_fiber) end
-            break
-        elseif event == EVENT_LOCK_LOCKED then
-            locked = true
-            promote_started = true
-            self:_start_promote_to_master(cfg, cfg_modify_index)
-        elseif event == EVENT_START_PROMOTE_DONE then
-            if self.locked then --
-                self:_finish_promote_to_master(cfg, cfg_modify_index)
-            end
-        elseif event == EVENT_LOCK_RELEASED then
-            locked = false
-
-        elseif event == EVENT_CONSUL_ERROR then
-            if self.storage and cfg and bootstrap_done then
-                self:_set_instance_read_only(cfg)
-            end
-        elseif event == EVENT_NEW_CONFIG then
-            cfg, cfg_modify_index = unpack(data)
-            assert(cfg, "autovshard: missing cfg in EVENT_NEW_CONFIG")
-            assert(cfg_modify_index, "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
-
-            -- reconfigure vshard
-            if self.storage and not bootstrap_done and
-                config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1 then
-                -- For storage instances we need to check for bootstrap_done to
-                -- handle the case when this is the first ever call to
-                -- vshard.storage.cfg(cfg) on current instance.
-                -- If there is no master defined in cfg for the current
-                -- replica set, then vshard.storage.cfg call will block forever
-                -- with this messages in log:
-                --
-                -- E> ER_LOADING: Instance bootstrap hasn't finished yet
-                -- I> will retry every 1.00 second
-                --
-                -- During bootstrap we should first elect master, so we ignore
-                -- the config when no master is set for current replica set.
-                log.info("autovshasrd: won't apply the config, master_count != 1, " ..
-                             "cannot bootstrap with this config.")
-            else
-                -- [TODO] do not apply new config if it is the same as the current one
-                self:_vshard_apply_config(config.make_vshard_config(cfg, self.login, self.password,
-                                                                    self.box_cfg))
-                bootstrap_done = true
-            end
-
-            if self.storage and self.automaster then
-                -- maybe update lock weight
-                local lock_weight = assert(
-                                        config.get_master_weight(cfg, self.box_cfg.instance_uuid),
-                                        "cannot get master weight")
-                if lock and lock_weight ~= lock.weight then
-                    util.ok_or_log_error(lock.set_weight, lock, lock_weight)
-                end
-
-                -- maybe update lock delay
-                local lock_delay = config.get_switchover_delay(cfg, self.box_cfg.instance_uuid) or
-                                       0
-                if lock and lock_delay ~= lock.delay then
-                    util.ok_or_log_error(lock.set_delay, lock, lock_delay)
-                end
-
-                -- start lock manager
-                if not lock_fiber then
-                    local lock_prefix = util.urljoin(self.consul_kv_prefix, self.cluster_name,
-                                                     self.box_cfg.replicaset_uuid)
-                    lock = wlock.WLock.new(self.consul_client, lock_prefix, lock_weight,
-                                           lock_delay,
-                                           {instance_uuid = self.box_cfg.instance_uuid},
-                                           self.consul_session_ttl)
-
-                    lock_fiber = fiber.new(util.ok_or_log_error, lock_manager, self.events, lock)
-                    lock_fiber:name("autovshard_lock_manager", {truncate = true})
-                end
-
-                log.debug("autovshard: locked: %s, is_master: %s", locked,
-                          config.is_master(cfg, self.box_cfg.instance_uuid))
-                if locked and not promote_started and
-                    (not config.is_master(cfg, self.box_cfg.instance_uuid) or
-                        not config.master_count(cfg, self.box_cfg.replicaset_uuid) == 1) then
-                    self:_start_promote_to_master(cfg, cfg_modify_index)
-                end
-            end
-        elseif event == EVENT_CONFIG_REMOVED then
-            if self.storage and cfg and bootstrap_done then
-                self:_set_instance_read_only(cfg)
-            end
-        end
+        put_event(unpack(msg))
     end
-
-    self._done:get()
 end
 
 function Autovshard:stop()
