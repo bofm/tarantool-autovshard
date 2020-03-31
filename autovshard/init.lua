@@ -205,7 +205,7 @@ function Autovshard:_watch_rs_members_info()
                           kv.value, value_or_err)
                 goto continue
             end
-            result.instance_uuid = value
+            result[instance_uuid] = value
             ::continue::
         end
         chan:put(result)
