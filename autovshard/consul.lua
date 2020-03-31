@@ -198,6 +198,7 @@ local function watch_error(err) log.error("error in Consul watch: " .. tostring(
 -- @tparam ?function opts.on_error
 -- @tparam ?number opts.rate_limit
 -- @tparam ?number opts.rate_limit_burst
+-- @tparam ?bool opts.consistent
 -- @tparam ?index opts.index index for CAS operation
 -- @return[1] fiber
 -- @treturn[2] function a function to stop the watch fiber
@@ -246,7 +247,7 @@ function ConsulClient:watch(opts)
 
     get = util.rate_limited(get, rate_limit, rate_limit_burst, rate_limit_init_burst)
 
-    local watcher = fiber.create(function()
+    local watcher = fiber.new(function()
         repeat xpcall(get, error_handler) until done_ch:is_closed()
     end)
     watcher:name("consul_watch_" .. key, {truncate = true})
