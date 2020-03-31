@@ -1,6 +1,7 @@
 local yaml = require("yaml")
 local log = require("log")
 local fiber = require("fiber")
+local uuid = require("uuid")
 local vshard = require("vshard")
 
 local fsm = require("autovshard.fsm")
