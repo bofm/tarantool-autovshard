@@ -283,10 +283,10 @@ function Autovshard:_mainloop()
                 set_rs_read_only()
             end,
             ["onleave" .. STATE_PROMOTING] = function(self, event, from, to)
-                if to ~= 'leader' and to ~= 'promoting' then --
+                if to ~= from and to ~= STATE_LEADER then --
                     stop_holding_lock()
                 end
-                stop_rs_state_monitor()
+                if to ~= from then stop_rs_state_monitor() end
             end,
             ["onleave" .. STATE_DONE] = function(self, event, from, to)
                 return false -- never leave STATE_DONE
