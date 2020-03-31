@@ -13,6 +13,7 @@ local CONSUL_CONFIG_KEY = "autovshard_cfg_yaml"
 local ERR_FIBER_CANCELLED = "fiber is cancelled"
 
 -- events
+local EVENT_START = "START"
 local EVENT_STOP = "STOP"
 local EVENT_LOCK_LOCKED = "LOCK_LOCKED"
 local EVENT_LOCK_RELEASED = "LOCK_RELEASED"
@@ -231,68 +232,67 @@ function Autovshard:_mainloop()
     local function automaster() return self.automaster end
     local function is_storage() return self.storage end
 
+    local STATE_INIT = "none"
+    local STATE_FOLLOWER = "FOLLOWER"
+    local STATE_CANDIDATE = "CANDIDATE"
+    local STATE_PROMOTING = "PROMOTING"
+    local STATE_LEADER = "LEADER"
+    local STATE_DETACHED = "DETACHED"
+    local STATE_DONE = "DONE"
+
     local machine = fsm.create({
         events = {
-            {name = "start", from = "none", to = "bootstrap"}, --
-            {name = "new_cfg", from = {"bootstrap", "read_only"}, to = "follower"},
-            {name = "try_lock", from = "follower", to = "candidate"}, --
-            {name = "cfg_removed", from = "*", to = "read_only"},
-            {name = "lock_acquired", from = "candidate", to = "promoting"}, --
-            {name = "lock_released", from = {"promoting", "leader"}, to = "follower"}, --
-            {name = "cfg_applied_to_rs", from = "promoting", to = "leader"}, --
-            {name = "consul_error", from = "*", to = "read_only"},
-            {name = "stop", from = "*", to = "done"}, --
+            {
+                name = EVENT_START,
+                from = STATE_INIT,
+                to = automaster() and STATE_CANDIDATE or STATE_FOLLOWER,
+            }, --
+            {
+                name = EVENT_NEW_CONFIG,
+                from = {STATE_FOLLOWER, STATE_CANDIDATE, STATE_DETACHED},
+                to = automaster() and STATE_CANDIDATE or STATE_FOLLOWER,
+            }, --
+            {name = EVENT_NEW_CONFIG, from = STATE_PROMOTING, to = STATE_PROMOTING}, --
+            {name = EVENT_NEW_CONFIG, from = STATE_LEADER, to = STATE_LEADER}, --
+            {name = EVENT_CONFIG_REMOVED, from = "*", to = STATE_DETACHED},
+            {name = EVENT_LOCK_LOCKED, from = STATE_CANDIDATE, to = STATE_PROMOTING}, --
+            {
+                name = EVENT_LOCK_RELEASED,
+                from = {STATE_PROMOTING, STATE_LEADER},
+                to = automaster() and STATE_CANDIDATE or STATE_FOLLOWER,
+            }, --
+            {name = EVENT_PROMOTED, from = STATE_PROMOTING, to = STATE_LEADER}, --
+            {name = EVENT_CONSUL_ERROR, from = "*", to = STATE_DETACHED}, --
+            {name = EVENT_STOP, from = "*", to = STATE_DONE}, --
         },
         callbacks = {
-            onbootstrap = function(self, event, from, to)
+            ["on" .. EVENT_START] = function(self, event, from, to)
                 stop_watch_config = watch_config(self.events, self.consul_client,
                                                  self.consul_kv_config_path)
             end,
-            onleavebootstrap = function(self, event, from, to, cfg)
-                if event == "consul_error" then
-                    -- cancel leaving bootstrap on consul_error
-                    return false
-                elseif event == "new_cfg" and
-                    config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1 then
-                    -- For storage instances we need to
-                    -- handle the case when this is the first ever call to
-                    -- vshard.storage.cfg(cfg) on current instance.
-                    -- If there is no master defined in cfg for the current
-                    -- replica set, then vshard.storage.cfg call will block forever
-                    -- with this messages in log:
-                    --
-                    -- E> ER_LOADING: Instance bootstrap hasn't finished yet
-                    -- I> will retry every 1.00 second
-                    --
-                    -- During bootstrap we should first elect master, so we ignore
-                    -- the config when no master is set for current replica set.
-                    log.info("autovshasrd: won't apply the config, master_count != 1, " ..
-                                 "cannot bootstrap with this config.")
-                end
-            end,
-            ondone = function(self, event, from, to)
+            ["on" .. STATE_DONE] = function(self, event, from, to)
                 stop_watch_config()
                 self._done:close()
             end,
-            onfollower = function(self, event, from, to, cfg, modify_index)
-                if is_storage() and automaster() then --
-                    fiber.new(self.try_lock, self)
-                end
+            ["on" .. STATE_CANDIDATE] = function(self, event, from, to)
+                start_lock_aquiring()
             end,
-            oncandidate = function(self, event, from, to) start_lock_aquiring() end,
-            onpromoting = function(self, event, from, to)
+            ["on" .. STATE_PROMOTING] = function(self, event, from, to)
                 hold_lock()
                 start_rs_state_monitor()
                 set_rs_read_only()
             end,
-            onleavepromoting = function(self, event, from, to)
+            ["onleave" .. STATE_PROMOTING] = function(self, event, from, to)
                 if to ~= 'leader' and to ~= 'promoting' then --
                     stop_holding_lock()
                 end
                 stop_rs_state_monitor()
             end,
+            ["onleave" .. STATE_DONE] = function(self, event, from, to)
+                return false -- never leave STATE_DONE
+            end,
             onstatechange = function(self, event, from, to)
-                log.info("autovshard: entered state %s", self.current)
+                if from ~= to then log.info("autovshard: entered state %s", to) end
             end,
         },
     })
