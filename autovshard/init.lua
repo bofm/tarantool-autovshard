@@ -182,6 +182,53 @@ function Autovshard:_set_instance_read_only(autovshard_cfg)
     end
 end
 
+---@return[1] channel of tables {instance_uuid = info}
+---@return[2] function to stop watching
+function Autovshard:_watch_rs_members_info()
+    local chan = fiber.channel()
+
+    local prefix = util.urljoin(self.consul_kv_prefix, self.box_cfg.replicaset_uuid)
+
+    local function on_change(kvs)
+        local result = {}
+        for _, kv in pairs(kvs) do
+            local key_base = string.sub(kv.key, string.len(prefix) + 2)
+            local ok, result = pcall(uuid.fromstr, key_base)
+            if not ok or result == nil then goto continue end
+            local instance_uuid = key_base
+
+            local ok, value_or_err = pcall(yaml.decode, kv.value)
+            if ok then
+                value = value_or_err
+            else
+                log.error("cannot decode Consul value key %q: value=%q, error=%q", kv.key,
+                          kv.value, value_or_err)
+                goto continue
+            end
+            result.instance_uuid = value
+            ::continue::
+        end
+        chan:put(result)
+    end
+
+    local _, stop_watching = self.consul_client:watch{
+        key = prefix,
+        on_change = on_change,
+        consistent = true,
+        prefix = true,
+    }
+
+    local done = fiber.channel()
+
+    fiber.new(function()
+        done:get()
+        stop_watching()
+        chan:close()
+    end)
+
+    return chan, function() done:close() end
+end
+
 function Autovshard:_promote_to_master(autovshard_cfg, cfg_modify_index)
     -- 1. set all to RO
     local ro_cfg = config.set_replicaset_read_only(autovshard_cfg, self.box_cfg.replicaset_uuid)
