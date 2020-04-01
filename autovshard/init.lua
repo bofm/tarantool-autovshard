@@ -55,7 +55,7 @@ local function watch_config(events, consul_client, consul_kv_config_path)
                 local autovshard_cfg = util.ok_or_log_error(config.decode, kv.value)
                 if autovshard_cfg then
                     autovshard_cfg = autovshard_cfg
-                    events:put{EVENT_NEW_CONFIG, {autovshard_cfg, kv.modify_index}}
+                    events:put{EVENT_NEW_CONFIG, autovshard_cfg, kv.modify_index}
                 end
             else
                 -- config removed
@@ -392,8 +392,8 @@ function Autovshard:_mainloop()
             ["onleave" .. STATE_LEADER] = function(sm, event, from, to)
                 self:_set_instance_read_only(cfg)
             end,
-            ["onbefore" .. EVENT_NEW_CONFIG] = function(sm, event, from, to, data)
-                local new_cfg, new_cfg_modify_index = unpack(data)
+            ["onbefore" .. EVENT_NEW_CONFIG] = function(sm, event, from, to, new_cfg,
+                                                        new_cfg_modify_index)
                 assert(new_cfg, "autovshard: missing cfg in EVENT_NEW_CONFIG")
                 assert(new_cfg_modify_index,
                        "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
@@ -449,6 +449,7 @@ function Autovshard:_mainloop()
     })
 
     function sm:event(e, ...) --
+        log.info("autovshard: got event: %s", e)
         if self:can(e) then self[e](self, ...) end
     end
 
@@ -456,9 +457,7 @@ function Autovshard:_mainloop()
         sm:event(EVENT_START)
         local msg = self.events:get()
         if msg == nil then break end
-        local event, data = unpack(msg)
-        log.info("autovshard: got event: %s", event)
-        sm:event(event, data)
+        sm:event(unpack(msg))
     end
 end
 
