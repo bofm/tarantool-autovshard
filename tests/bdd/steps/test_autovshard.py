@@ -255,6 +255,8 @@ def check_tarantool_logs(logs: str):
         lambda l: "Exception during calling 'vshard.storage.buckets_count' on " in l
         and ": Invalid argument" in l,
         lambda l: "Connection refused" in l,
+        lambda l: "Master is not configured for replicaset" in l
+        and "vshard.discovery._static_router" in l,
     ]
     all_errors = lfilter(lambda l: "E>" in l, lines)
     is_real_error = none_fn(*is_ok)
@@ -378,7 +380,11 @@ def container_tnt_eval(
     c: Container, lua_script, suppress_errors=False,
 ) -> Tuple[int, bytes]:
     code, output = c.exec_run(
-        ["bash", "-ec", f'cat <<"EOF" | tarantoolctl connect 3301\n{lua_script}\nEOF\n'],
+        [
+            "bash",
+            "-ec",
+            f'cat <<"EOF" | tarantoolctl connect 3301\n{lua_script}\nEOF\n',
+        ],
     )
     if not suppress_errors:
         assert (
@@ -444,7 +450,7 @@ def check_router_api(c: Container):
     c.reload()
     # fmt: off
     script = dedent('''
-        do 
+        do
             assert(router.test(1) == "test ok")
             assert(router.test(2) == "test ok")
             assert(router.test(3) == "test ok")

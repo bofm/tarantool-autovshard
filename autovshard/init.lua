@@ -316,8 +316,7 @@ function Autovshard:_mainloop()
                 stop_watch_config()
                 self.events:close()
             end,
-            ["on" .. STATE_FOLLOWER] = function(sm, event, from, to, zzz)
-                log.info("in follower, cfg: %q, zzz: %q", cfg, zzz)
+            ["on" .. STATE_FOLLOWER] = function(sm, event, from, to)
                 if is_storage() and automaster() and cfg then
                     -- maybe update lock weight
                     local lock_weight = assert(config.get_master_weight(cfg,
@@ -425,6 +424,21 @@ function Autovshard:_mainloop()
                     self:_vshard_apply_config(vshard_cfg, cfg_modify_index)
                     -- [TODO] handle config apply error
                     bootstrap_done = true
+                end
+
+                -- maybe update lock weight
+                local lock_weight = assert(
+                                        config.get_master_weight(cfg, self.box_cfg.instance_uuid),
+                                        "cannot get master weight")
+                if lock and lock_weight ~= lock.weight then
+                    util.ok_or_log_error(lock.set_weight, lock, lock_weight)
+                end
+
+                -- maybe update lock delay
+                local lock_delay = config.get_switchover_delay(cfg, self.box_cfg.instance_uuid) or
+                                       0
+                if lock and lock_delay ~= lock.delay then
+                    util.ok_or_log_error(lock.set_delay, lock, lock_delay)
                 end
             end,
             onstatechange = function(sm, event, from, to)
