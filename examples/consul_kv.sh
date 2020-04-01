@@ -14,8 +14,8 @@ sharding:
                 name: a1
                 master: false
             aaaaaaaa-aaaa-aaaa-aaaa-000000000002:
-                master_weight: 20
-                switchover_delay: 10
+                master_weight: 2000
+                switchover_delay: 0
                 address: a2:3301
                 name: a2
                 master: false

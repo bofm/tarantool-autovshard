@@ -288,9 +288,7 @@ function Autovshard:_mainloop()
     local STATE_DETACHED = "DETACHED"
     local STATE_DONE = "DONE"
 
-    local autovshard = self
-
-    local machine = fsm.create({
+    local sm = fsm.create({
         events = {
             {name = EVENT_START, from = STATE_INIT, to = STATE_FOLLOWER}, --
             {name = EVENT_NEW_CONFIG, from = {STATE_FOLLOWER, STATE_DETACHED}, to = STATE_FOLLOWER}, --
@@ -308,83 +306,82 @@ function Autovshard:_mainloop()
             {name = EVENT_STOP, from = "*", to = STATE_DONE}, --
         },
         callbacks = {
-            ["on" .. EVENT_START] = function(self, event, from, to)
-                stop_watch_config = watch_config(autovshard.events, autovshard.consul_client,
-                                                 autovshard.consul_kv_config_path)
+            ["on" .. EVENT_START] = function(sm, event, from, to)
+                stop_watch_config = watch_config(self.events, self.consul_client,
+                                                 self.consul_kv_config_path)
             end,
-            ["on" .. STATE_DONE] = function(self, event, from, to)
+            ["on" .. STATE_DONE] = function(sm, event, from, to)
                 stop_watch_config()
-                autovshard.events:close()
+                self.events:close()
             end,
-            ["on" .. STATE_FOLLOWER] = function(self, event, from, to)
+            ["on" .. STATE_FOLLOWER] = function(sm, event, from, to)
                 if is_storage() and automaster() and cfg then
                     -- maybe update lock weight
-                    local lock_weight = assert(config.get_master_weight(cfg, autovshard.box_cfg
-                                                                            .instance_uuid),
+                    local lock_weight = assert(config.get_master_weight(cfg,
+                                                                        self.box_cfg.instance_uuid),
                                                "cannot get master weight")
                     if lock and lock_weight ~= lock.weight then
                         util.ok_or_log_error(lock.set_weight, lock, lock_weight)
                     end
 
                     -- maybe update lock delay
-                    local lock_delay = config.get_switchover_delay(cfg, autovshard.box_cfg
-                                                                       .instance_uuid) or 0
+                    local lock_delay =
+                        config.get_switchover_delay(cfg, self.box_cfg.instance_uuid) or 0
                     if lock and lock_delay ~= lock.delay then
                         util.ok_or_log_error(lock.set_delay, lock, lock_delay)
                     end
 
                     -- start lock manager
                     if not lock_fiber then
-                        local lock_prefix = util.urljoin(autovshard.consul_kv_prefix,
-                                                         autovshard.cluster_name,
-                                                         autovshard.box_cfg.replicaset_uuid)
-                        lock = wlock.WLock.new(autovshard.consul_client, lock_prefix, lock_weight,
+                        local lock_prefix = util.urljoin(self.consul_kv_prefix, self.cluster_name,
+                                                         self.box_cfg.replicaset_uuid)
+                        lock = wlock.WLock.new(self.consul_client, lock_prefix, lock_weight,
                                                lock_delay,
-                                               {instance_uuid = autovshard.box_cfg.instance_uuid},
-                                               autovshard.consul_session_ttl)
+                                               {instance_uuid = self.box_cfg.instance_uuid},
+                                               self.consul_session_ttl)
 
-                        lock_fiber = fiber.new(util.ok_or_log_error, lock_manager,
-                                               autovshard.events, lock)
+                        lock_fiber = fiber.new(util.ok_or_log_error, lock_manager, self.events,
+                                               lock)
                         lock_fiber:name("autovshard_lock_manager", {truncate = true})
                         stop_locking = util.partial(pcall, lock_fiber.cancel, lock_fiber)
                     end
                 end
             end,
-            ["on" .. STATE_PROMOTING] = function(self, event, from, to)
+            ["on" .. STATE_PROMOTING] = function(sm, event, from, to)
                 local chan
-                -- chan, stop_watching_rs_members = autovshard:_watch_rs_members_info()
+                -- chan, stop_watching_rs_members = self:_watch_rs_members_info()
                 -- set_rs_read_only()
-                fiber.new(function() autovshard.events:put{EVENT_PROMOTED} end)
+                fiber.new(function() self.events:put{EVENT_PROMOTED} end)
             end,
-            ["onleave" .. STATE_PROMOTING] = function(self, event, from, to)
+            ["onleave" .. STATE_PROMOTING] = function(sm, event, from, to)
                 local states_with_locking = {STATE_FOLLOWER, STATE_PROMOTING, STATE_LEADER}
                 if not util.has(states_with_locking, to) then --
                     stop_locking()
                 end
                 if to ~= STATE_PROMOTING then stop_watching_rs_members() end
             end,
-            ["onleave" .. STATE_DONE] = function(self, event, from, to)
+            ["onleave" .. STATE_DONE] = function(sm, event, from, to)
                 return false -- never leave STATE_DONE
             end,
-            ["on" .. STATE_DETACHED] = function(self, event, from, to)
-                if autovshard.storage and cfg and pcall(box.info) then
-                    autovshard:_set_instance_read_only(cfg)
+            ["on" .. STATE_DETACHED] = function(sm, event, from, to)
+                if self.storage and cfg and pcall(box.info) then
+                    self:_set_instance_read_only(cfg)
                 end
             end,
-            ["on" .. STATE_LEADER] = function(self, event, from, to)
-                if (not config.is_master(cfg, autovshard.box_cfg.instance_uuid) or
-                    not config.master_count(cfg, autovshard.box_cfg.replicaset_uuid) == 1) then
-                    autovshard:_promote_to_master(cfg, cfg_modify_index)
+            ["on" .. STATE_LEADER] = function(sm, event, from, to)
+                if (not config.is_master(cfg, self.box_cfg.instance_uuid) or
+                    not config.master_count(cfg, self.box_cfg.replicaset_uuid) == 1) then
+                    self:_promote_to_master(cfg, cfg_modify_index)
                 end
             end,
-            ["onbefore" .. EVENT_NEW_CONFIG] = function(self, event, from, to, data)
+            ["onbefore" .. EVENT_NEW_CONFIG] = function(sm, event, from, to, data)
                 cfg, cfg_modify_index = unpack(data)
                 assert(cfg, "autovshard: missing cfg in EVENT_NEW_CONFIG")
                 assert(cfg_modify_index, "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
 
                 -- reconfigure vshard
                 if is_storage() and not bootstrap_done and
-                    config.master_count(cfg, autovshard.box_cfg.replicaset_uuid) ~= 1 then
+                    config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1 then
                     -- For storage instances we need to check for bootstrap_done to
                     -- handle the case when this is the first ever call to
                     -- vshard.storage.cfg(cfg) on current instance.
@@ -397,37 +394,36 @@ function Autovshard:_mainloop()
                     --
                     -- During bootstrap we should first elect master, so we ignore
                     -- the config when no master is set for current replica set.
-                    log.info("autovshasrd: won't apply the config, master_count != 1, " ..
+                    log.info("autovshard: won't apply the config, master_count != 1, " ..
                                  "cannot bootstrap with this config.")
                 else
                     -- [TODO] do not apply new config if it is the same as the current one
-                    local vshard_cfg = config.make_vshard_config(cfg, autovshard.login,
-                                                                 autovshard.password,
-                                                                 autovshard.box_cfg)
-                    autovshard:_vshard_apply_config(vshard_cfg, cfg_modify_index)
+                    local vshard_cfg = config.make_vshard_config(cfg, self.login, self.password,
+                                                                 self.box_cfg)
+                    self:_vshard_apply_config(vshard_cfg, cfg_modify_index)
                     bootstrap_done = true
                 end
             end,
-            onstatechange = function(self, event, from, to)
-                -- if from ~= to then log.info("autovshard: entered state %s", to) end
+            onstatechange = function(sm, event, from, to)
+                -- if from ~= to then log.info("self: entered state %s", to) end
                 log.info("autovshard: changed state %s -> %s", from, to)
             end,
         },
     })
 
-    local function machine_event(e, ...) --
-        if machine:can(e) then machine[e](machine, ...) end
+    function sm:event(e, ...) --
+        if self:can(e) then self[e](self, ...) end
     end
 
     while true do
         -- ! To avoid deadlock DO NOT put into `self.events` channel IN THIS FIBER.
         -- * Only get events from `self.events` channel and react to the events.
-        machine[EVENT_START](machine)
+        sm:event(EVENT_START)
         local msg = self.events:get()
         if msg == nil then break end
         local event, data = unpack(msg)
         log.info("autovshard: got event: %s", event)
-        machine_event(event, data)
+        sm:event(event, data)
     end
 end
 
