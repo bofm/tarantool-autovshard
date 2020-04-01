@@ -265,6 +265,8 @@ function Autovshard:_promote_to_master(autovshard_cfg, cfg_modify_index)
 end
 
 function Autovshard:_mainloop()
+    -- ! To avoid deadlock DO NOT put into `self.events` channel IN THIS FIBER.
+    -- * Only get events from `self.events` channel and react to the events.
     self.events = fiber.channel()
 
     local cfg
@@ -416,8 +418,6 @@ function Autovshard:_mainloop()
     end
 
     while true do
-        -- ! To avoid deadlock DO NOT put into `self.events` channel IN THIS FIBER.
-        -- * Only get events from `self.events` channel and react to the events.
         sm:event(EVENT_START)
         local msg = self.events:get()
         if msg == nil then break end
