@@ -21,7 +21,7 @@ local EVENT_LOCK_RELEASED = "LOCK_RELEASED"
 local EVENT_NEW_CONFIG = "NEW_CONFIG"
 local EVENT_CONFIG_REMOVED = "CONFIG_REMOVED"
 local EVENT_CONSUL_ERROR = "CONSUL_ERROR"
-local EVENT_PROMOTED = "PROMOTED"
+local EVENT_PROMOTE = "PROMOTE"
 
 local function lock_manager(events, lock)
     local done
@@ -303,7 +303,7 @@ function Autovshard:_mainloop()
                 from = {STATE_PROMOTING, STATE_LEADER},
                 to = STATE_FOLLOWER,
             }, --
-            {name = EVENT_PROMOTED, from = STATE_PROMOTING, to = STATE_LEADER}, --
+            {name = EVENT_PROMOTE, from = STATE_PROMOTING, to = STATE_LEADER}, --
             {name = EVENT_CONSUL_ERROR, from = "*", to = STATE_DETACHED}, --
             {name = EVENT_STOP, from = "*", to = STATE_DONE}, --
         },
@@ -316,7 +316,8 @@ function Autovshard:_mainloop()
                 stop_watch_config()
                 self.events:close()
             end,
-            ["on" .. STATE_FOLLOWER] = function(sm, event, from, to)
+            ["on" .. STATE_FOLLOWER] = function(sm, event, from, to, zzz)
+                log.info("in follower, cfg: %q, zzz: %q", cfg, zzz)
                 if is_storage() and automaster() and cfg then
                     -- maybe update lock weight
                     local lock_weight = assert(config.get_master_weight(cfg,
@@ -353,7 +354,7 @@ function Autovshard:_mainloop()
                 local chan
                 -- chan, stop_watching_rs_members = self:_watch_rs_members_info()
                 -- set_rs_read_only()
-                fiber.new(function() self.events:put{EVENT_PROMOTED} end)
+                fiber.new(function() self.events:put{EVENT_PROMOTE} end)
             end,
             ["onleave" .. STATE_PROMOTING] = function(sm, event, from, to)
                 local states_with_locking = {STATE_FOLLOWER, STATE_PROMOTING, STATE_LEADER}
@@ -362,25 +363,44 @@ function Autovshard:_mainloop()
                 end
                 if to ~= STATE_PROMOTING then stop_watching_rs_members() end
             end,
+            ["on" .. STATE_LEADER] = function(sm, event, from, to)
+                if (not config.is_master(cfg, self.box_cfg.instance_uuid) or
+                    config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1) then
+                    fiber.new(function()
+                        self:_promote_to_master(cfg, cfg_modify_index)
+                        sm:transition(event)
+                    end)
+                    return sm.ASYNC
+                end
+            end,
+            ["onleave" .. STATE_LEADER] = function(sm, event, from, to)
+                if to ~= STATE_LEADER then
+                    fiber.new(function()
+                        self:_set_instance_read_only(cfg)
+                        sm:transition(event)
+                    end)
+                    return sm.ASYNC
+                end
+            end,
             ["onleave" .. STATE_DONE] = function(sm, event, from, to)
                 return false -- never leave STATE_DONE
             end,
             ["on" .. STATE_DETACHED] = function(sm, event, from, to)
-                if self.storage and cfg and pcall(box.info) then
+                if self.storage and cfg and bootstrap_done then
                     self:_set_instance_read_only(cfg)
                 end
             end,
-            ["on" .. STATE_LEADER] = function(sm, event, from, to)
-                if (not config.is_master(cfg, self.box_cfg.instance_uuid) or
-                    not config.master_count(cfg, self.box_cfg.replicaset_uuid) == 1) then
-                    self:_promote_to_master(cfg, cfg_modify_index)
-                end
+            ["onleave" .. STATE_LEADER] = function(sm, event, from, to)
+                self:_set_instance_read_only(cfg)
             end,
             ["onbefore" .. EVENT_NEW_CONFIG] = function(sm, event, from, to, data)
-                cfg, cfg_modify_index = unpack(data)
-                assert(cfg, "autovshard: missing cfg in EVENT_NEW_CONFIG")
-                assert(cfg_modify_index, "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
-
+                local new_cfg, new_cfg_modify_index = unpack(data)
+                assert(new_cfg, "autovshard: missing cfg in EVENT_NEW_CONFIG")
+                assert(new_cfg_modify_index,
+                       "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
+                cfg, cfg_modify_index = new_cfg, new_cfg_modify_index
+            end,
+            ["on" .. EVENT_NEW_CONFIG] = function(sm, event, from, to, data)
                 -- reconfigure vshard
                 if is_storage() and not bootstrap_done and
                     config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1 then
@@ -403,6 +423,7 @@ function Autovshard:_mainloop()
                     local vshard_cfg = config.make_vshard_config(cfg, self.login, self.password,
                                                                  self.box_cfg)
                     self:_vshard_apply_config(vshard_cfg, cfg_modify_index)
+                    -- [TODO] handle config apply error
                     bootstrap_done = true
                 end
             end,
