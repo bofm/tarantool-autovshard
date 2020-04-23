@@ -255,7 +255,9 @@ function Autovshard:_mainloop()
                 -- the config when no master is set for current replica set.
                 log.info("autovshasrd: won't apply the config, master_count != 1, " ..
                              "cannot bootstrap with this config.")
-            else
+            elseif not self.storage 
+                or (self.storage and config.get_instance_params(cfg, self.box_cfg.instance_uuid) ~= nil)
+                then
                 -- [TODO] do not apply new config if it is the same as the current one
                 self:_vshard_apply_config(config.make_vshard_config(cfg, self.login, self.password,
                                                                     self.box_cfg))
