@@ -359,6 +359,7 @@ local function rstrip_s(str)
     if string.sub(str, string.len(str)) == "s" then --
         return string.sub(str, 1, string.len(str) - 1)
     end
+    return str
 end
 
 function Session:renew()
