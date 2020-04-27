@@ -239,28 +239,50 @@ function Autovshard:_mainloop()
             assert(cfg_modify_index, "autovshard: missing cfg_modify_index in EVENT_NEW_CONFIG")
 
             -- reconfigure vshard
-            if self.storage and not bootstrap_done and
-                config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1 then
-                -- For storage instances we need to check for bootstrap_done to
-                -- handle the case when this is the first ever call to
-                -- vshard.storage.cfg(cfg) on current instance.
-                -- If there is no master defined in cfg for the current
-                -- replica set, then vshard.storage.cfg call will block forever
-                -- with this messages in log:
-                --
-                -- E> ER_LOADING: Instance bootstrap hasn't finished yet
-                -- I> will retry every 1.00 second
-                --
-                -- During bootstrap we should first elect master, so we ignore
-                -- the config when no master is set for current replica set.
-                log.info("autovshasrd: won't apply the config, master_count != 1, " ..
-                             "cannot bootstrap with this config.")
-            else
-                -- [TODO] do not apply new config if it is the same as the current one
+
+            local allow_apply_config = true
+
+            if self.storage then
+
+                if config.get_instance_params(cfg, self.box_cfg.instance_uuid) == nil then
+                     -- For storage instances we need to verify that the instance 
+                     -- is present in the cluster config, otherwise the instance 
+                     -- may boot as a separate cluster
+ 
+                    allow_apply_config = false
+
+                    log.info("autovshasrd: won't apply the config, instance_uuid=%q ".. 
+                        "not found in consul config", self.box_cfg.instance_uuid)
+                elseif not bootstrap_done and config.master_count(cfg, self.box_cfg.replicaset_uuid) ~= 1 then
+                    -- For storage instances we need to check for bootstrap_done to
+                    -- handle the case when this is the first ever call to
+                    -- vshard.storage.cfg(cfg) on current instance.
+                    -- If there is no master defined in cfg for the current
+                    -- replica set, then vshard.storage.cfg call will block forever
+                    -- with this messages in log:
+                    --
+                    -- E> ER_LOADING: Instance bootstrap hasn't finished yet
+                    -- I> will retry every 1.00 second
+                    --
+                    -- During bootstrap we should first elect master, so we ignore
+                    -- the config when no master is set for current replica set.
+
+                    allow_apply_config = false
+
+                    log.info("autovshasrd: won't apply the config, master_count != 1, " ..
+                    "cannot bootstrap with this config.")
+                end
+
+            end         
+
+            -- [TODO] do not apply new config if it is the same as the current one
+            if allow_apply_config then
                 self:_vshard_apply_config(config.make_vshard_config(cfg, self.login, self.password,
-                                                                    self.box_cfg))
-                bootstrap_done = true
-            end
+                self.box_cfg)) 
+                
+                bootstrap_done = true  
+            end    
+
 
             if self.storage and self.automaster then
                 -- maybe update lock weight
