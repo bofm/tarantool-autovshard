@@ -1,6 +1,25 @@
-FROM tarantool/tarantool:1.10.3
+FROM debian:buster-slim
 
-RUN apk add -U --no-cache build-base cmake git bash lua5.1-dev
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        debian-archive-keyring \
+        curl \
+        gnupg \
+        apt-transport-https \
+        ca-certificates \
+    # https://packagecloud.io/tarantool/1_10/install#manual
+    && curl -s -L https://packagecloud.io/tarantool/1_10/gpgkey | apt-key add - \
+    && list=/etc/apt/sources.list.d/tarantool_1_10.list \
+        && echo 'deb https://packagecloud.io/tarantool/1_10/debian/ buster main' > $list \
+        && echo 'deb-src https://packagecloud.io/tarantool/1_10/debian/ buster main' >> $list \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y \
+        tarantool=1.10.6.3.gaacc44457-1 \
+        lua5.1-dev \
+        luarocks \
+        build-essential \
+        git \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN luarocks install busted 2.0.rc12-1 \
     && luarocks install luacov 0.13.0 \
