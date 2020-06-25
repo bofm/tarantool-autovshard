@@ -14,7 +14,7 @@ RUN apt-get update \
         && echo 'deb-src https://packagecloud.io/tarantool/1_10/debian/ buster main' >> $list \
     && apt-get update \
     && apt-get install --no-install-recommends -y \
-        tarantool=1.10.6.3.gaacc44457-1 \
+        tarantool \
         lua5.1-dev \
         luarocks \
         build-essential \
