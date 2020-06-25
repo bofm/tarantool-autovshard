@@ -134,7 +134,7 @@ centralized configuration storage in Consul.
        Examples: `"http://127.0.0.1:8500"`, `{"https://consul1.example.com:8501", "https://consul2.example.com:8501"}`
        If multiple Consul addresses are set and Consul is unreachable at an address, Autovshard will use the
        next address from the array for the subsequent requests to Consul.
-       **None**: All addresses must point to the instances of the same Consul cluster in the
+       **Note**: All addresses must point to the instances of the same Consul cluster in the
        same [Consul datacenter](https://www.consul.io/docs/commands/catalog/datacenters.html). 
     * `consul_token` - optional string, Consul token (if you use ACLs)
     * `consul_kv_prefix` - string, a prefix in Consul KV storage. Must be the same on all instances in a Tarantool cluster.
